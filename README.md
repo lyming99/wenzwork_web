@@ -36,9 +36,9 @@ WenzWork是一个跨平台的远程管理ai任务的工具，支持一个客户�
 
 6. 测试站点(临时测试)：[https://work.wenzflow.com](https://work.wenzflow.com)
 
-7. 前端项目：\[[https://github.com/lyming99/wenzwork](https://github.com/lyming99/wenzwork)\]([https://github.com/lyming99/wenzwork\_web](https://github.com/lyming99/wenzwork_web))
+7. 前端项目：\[[https://github.com/lyming99/wenzwork](https://github.com/lyming99/wenzwork)\]([https://github.com/lyming99/wenzwork](https://github.com/lyming99/wenzwork_web))
 
-8. 后端项目：\[[https://github.com/lyming99/wenzwork\\\_web](https://github.com/lyming99/wenzwork\_web)\]([https://github.com/lyming99/wenzwork\_web](https://github.com/lyming99/wenzwork_web))
+8. 后端项目：\[[https://github.com/lyming99/wenzwork\\\_web](https://github.com/lyming99/wenzwork_web)\]([https://github.com/lyming99/wenzwork\_web](https://github.com/lyming99/wenzwork_web))
 
 9. 手机端项目：保留项目，看情况，先保留版权偷偷上架~
 
