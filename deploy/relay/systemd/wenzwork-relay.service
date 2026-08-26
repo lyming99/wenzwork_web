@@ -1,0 +1,41 @@
+[Unit]
+Description=WenzWork Relay Server
+Documentation=https://wenzwork.com/docs/relay
+Wants=network-online.target time-sync.target
+After=network-online.target time-sync.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=wenzwork-relay
+Group=wenzwork-relay
+EnvironmentFile=-/etc/wenzwork-relay/relay.env
+ExecStart=/opt/wenzwork-relay/current/bin/wenzwork-relay-server
+Restart=on-failure
+RestartSec=5s
+RestartPreventExitStatus=78
+TimeoutStartSec=60s
+TimeoutStopSec=45s
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+UMask=0027
+ReadWritePaths=/var/lib/wenzwork-relay
+
+[Install]
+WantedBy=multi-user.target

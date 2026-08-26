@@ -1,0 +1,29 @@
+{
+  "name": "wenzwork-web",
+  "private": true,
+  "version": "0.2.4",
+  "packageManager": "pnpm@11.15.1",
+  "scripts": {
+    "dev:web": "corepack pnpm --dir web dev",
+    "build:web": "corepack pnpm --dir web build",
+    "typecheck:web": "corepack pnpm --dir web typecheck",
+    "test:web": "corepack pnpm --dir web test",
+    "lint:web": "corepack pnpm --dir web lint",
+    "format:web": "corepack pnpm --dir web format",
+    "generate:api:web": "corepack pnpm --dir web generate:api",
+    "generate:api:server": "cd server && go generate .",
+    "generate:proto": "go run github.com/bufbuild/buf/cmd/buf@v1.72.0 generate --template buf.gen.yaml",
+    "generate:remote-vectors": "cd server && go run ./cmd/remote-contract-vectors",
+    "sync:remote-contract": "node scripts/sync-remote-contract.mjs",
+    "check:remote-contract": "node scripts/sync-remote-contract.mjs --check",
+    "generate:api": "corepack pnpm generate:api:web && corepack pnpm generate:api:server && corepack pnpm generate:proto",
+    "lint:api": "redocly lint api/openapi.yaml",
+    "test:server": "cd server && go test ./...",
+    "build:server": "cd server && go build -buildvcs=false ./cmd/api ./cmd/admin ./cmd/device-agent ./cmd/migrate ./cmd/remote-poc ./cmd/relay-directory ./cmd/relay-scheduler ./cmd/relay-server ./cmd/relayctl ./cmd/relay-client-test",
+    "build:relay-client-test": "node scripts/build-relay-client-test.mjs",
+    "check": "corepack pnpm check:remote-contract && corepack pnpm lint:api && corepack pnpm lint:web && corepack pnpm typecheck:web && corepack pnpm test:web && corepack pnpm build:web && corepack pnpm test:server && corepack pnpm build:server && corepack pnpm build:relay-client-test"
+  },
+  "devDependencies": {
+    "@redocly/cli": "^2.39.0"
+  }
+}

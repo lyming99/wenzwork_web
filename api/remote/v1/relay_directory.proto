@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package remote.v1;
+
+option go_package = "github.com/wenzwork/wenzwork-web/server/internal/generated/remote/v1;remotev1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+enum RelayInstanceStatus {
+  RELAY_INSTANCE_STATUS_UNSPECIFIED = 0;
+  RELAY_INSTANCE_STATUS_STARTING = 1;
+  RELAY_INSTANCE_STATUS_READY = 2;
+  RELAY_INSTANCE_STATUS_DRAINING = 3;
+  RELAY_INSTANCE_STATUS_STOPPED = 4;
+  RELAY_INSTANCE_STATUS_OFFLINE = 5;
+}
+
+message RelayNodeIdentity {
+  string installation_id = 1;
+  string cell_id = 2;
+  string identity_thumbprint = 3;
+}
+
+message RegisterInstanceRequest {
+  string instance_id = 1;
+  string version = 2;
+  uint32 protocol_version = 3;
+  repeated string addresses = 4;
+  google.protobuf.Struct capabilities = 5;
+  google.protobuf.Timestamp started_at = 6;
+}
+
+message RegisterInstanceResponse {
+  string instance_id = 1;
+  RelayInstanceStatus status = 2;
+  google.protobuf.Timestamp lease_expires_at = 3;
+}
+
+message HeartbeatRequest {
+  string instance_id = 1;
+  uint64 active_connections = 2;
+  uint64 active_file_transfers = 3;
+  uint64 memory_bytes = 4;
+  double ingress_mbps = 5;
+  double egress_mbps = 6;
+  double write_loop_lag_ms = 7;
+  repeated string addresses = 8;
+  google.protobuf.Struct capabilities = 9;
+}
+
+message HeartbeatResponse {
+  google.protobuf.Timestamp lease_expires_at = 1;
+  bool drain = 2;
+  bool revoked = 3;
+  bool routing_ready = 4;
+}
+
+message UnregisterInstanceRequest {
+  string instance_id = 1;
+}
+
+message UnregisterInstanceResponse {}
+
+message RenewCertificateRequest {
+  bytes certificate_signing_request = 1;
+  bytes nonce = 2;
+  bytes identity_signature = 3;
+}
+
+message RenewCertificateResponse {
+  bytes certificate_pem = 1;
+  bytes certificate_authority_pem = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+service RelayDirectoryService {
+  rpc RegisterInstance(RegisterInstanceRequest) returns (RegisterInstanceResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc UnregisterInstance(UnregisterInstanceRequest) returns (UnregisterInstanceResponse);
+  rpc RenewCertificate(RenewCertificateRequest) returns (RenewCertificateResponse);
+}

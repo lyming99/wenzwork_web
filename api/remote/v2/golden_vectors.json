@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "binding": {
+    "grantId": "grant-v2-golden",
+    "linkId": "link-v2-golden",
+    "clientId": "client-v2-golden",
+    "deviceId": "device-v2-golden",
+    "relayNodeId": "relay-node-v2",
+    "relayCellId": "relay-cell-v2",
+    "targetConnectionEpoch": 9,
+    "clientIdentityVersion": 2,
+    "deviceIdentityVersion": 4,
+    "clientEphemeralPublic": "ERERERERERERERERERERERERERERERERERERERERERE",
+    "deviceEphemeralPublic": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI",
+    "clientChallenge": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+    "deviceChallenge": "REREREREREREREREREREREREREREREREREREREREREQ",
+    "expiresAtUnixMilli": 1800000000000
+  },
+  "sharedSecret": "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU",
+  "record": {
+    "channelId": "channel-v2-golden",
+    "streamId": "stream-v2-golden",
+    "keyId": 1,
+    "direction": 1,
+    "frameType": 8,
+    "streamSequence": 7,
+    "plaintext": "cmVtb3RlL3YyIGdvbGRlbiBwYXlsb2Fk"
+  },
+  "terminalStream": {
+    "sessionId": "22222222-2222-4222-8222-222222222222",
+    "hello": {
+      "afterOutputSequence": 7,
+      "afterInputSequence": 3,
+      "afterResizeSequence": 2,
+      "outputCreditBytes": 65536,
+      "base64Url": "2i0kMjIyMjIyMjItMjIyMi00MjIyLTgyMjItMjIyMjIyMjIyMjIyoi4OmCYHoCYDqCYCsCaAgAQ"
+    },
+    "input": {
+      "sequence": 4,
+      "dataBase64Url": "dGVybWluYWwtdjQt5Lit",
+      "base64Url": "2i0kMjIyMjIyMjItMjIyMi00MjIyLTgyMjItMjIyMjIyMjIyMjIyqi4V6CYE8iYPdGVybWluYWwtdjQt5Lit"
+    }
+  },
+  "rekey": {
+    "rekeyId": "rekey-v2-golden",
+    "keyId": 2,
+    "sharedSecret": "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY",
+    "ephemeralPublic": "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3c"
+  },
+  "carrierProof": {
+    "carrierId": "carrier-v2-golden",
+    "carrierEpoch": 3,
+    "challenge": "iIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIg"
+  },
+  "identitySeeds": {
+    "client": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "device": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"
+  },
+  "sequencerLifecycle": {
+    "window": 4,
+    "tombstoneLimit": 2,
+    "activeLimit": 8,
+    "maximumStreamsPerLink": 2,
+    "keyId": 1,
+    "linkId": "link-lifecycle",
+    "channelId": "channel-lifecycle",
+    "streamId": "stream-lifecycle",
+    "secondStreamId": "stream-lifecycle-two",
+    "thirdStreamId": "stream-lifecycle-three",
+    "outboundSequences": [1, 2, 3],
+    "inboundSequences": [1, 3, 2],
+    "replayedInboundSequence": 2,
+    "closedAtUnixMilli": 1787097600000,
+    "expectedBeforeClose": {
+      "outboundEntries": 1,
+      "inboundEntries": 1,
+      "tombstones": 0,
+      "activeStreams": 1,
+      "usedStreamIds": 1,
+      "keyCount": 1,
+      "maximumClosedSequence": 0,
+      "maximumStreamsPerLink": 2
+    },
+    "expectedAfterClose": {
+      "outboundEntries": 0,
+      "inboundEntries": 0,
+      "tombstones": 2,
+      "activeStreams": 0,
+      "usedStreamIds": 1,
+      "keyCount": 1,
+      "maximumClosedSequence": 3,
+      "maximumStreamsPerLink": 2
+    },
+    "expectedHardLimit": {
+      "outboundEntries": 1,
+      "inboundEntries": 0,
+      "tombstones": 2,
+      "activeStreams": 1,
+      "usedStreamIds": 2,
+      "keyCount": 1,
+      "maximumClosedSequence": 1,
+      "maximumStreamsPerLink": 2
+    },
+    "expectedAfterRetire": {
+      "outboundEntries": 0,
+      "inboundEntries": 0,
+      "tombstones": 0,
+      "activeStreams": 0,
+      "usedStreamIds": 1,
+      "keyCount": 0,
+      "maximumClosedSequence": 0,
+      "maximumStreamsPerLink": 2
+    },
+    "expectedAfterReset": {
+      "outboundEntries": 0,
+      "inboundEntries": 0,
+      "tombstones": 0,
+      "activeStreams": 1,
+      "usedStreamIds": 1,
+      "keyCount": 0,
+      "maximumClosedSequence": 0,
+      "maximumStreamsPerLink": 2
+    }
+  },
+  "expected": {
+    "initTranscript": "AAAAHHdlbnp3b3JrLXJlbW90ZS12Mi9oYW5kc2hha2UAAAABMgAAAA9ncmFudC12Mi1nb2xkZW4AAAAObGluay12Mi1nb2xkZW4AAAAQY2xpZW50LXYyLWdvbGRlbgAAABBkZXZpY2UtdjItZ29sZGVuAAAADXJlbGF5LW5vZGUtdjIAAAANcmVsYXktY2VsbC12MgAAAAE5AAAAATIAAAABMAAAACAREREREREREREREREREREREREREREREREREREREREREQAAAAAAAAAgMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAAAAAABoxhcUAAAAAABAA",
+    "handshakeTranscript": "AAAAHHdlbnp3b3JrLXJlbW90ZS12Mi9oYW5kc2hha2UAAAABMgAAAA9ncmFudC12Mi1nb2xkZW4AAAAObGluay12Mi1nb2xkZW4AAAAQY2xpZW50LXYyLWdvbGRlbgAAABBkZXZpY2UtdjItZ29sZGVuAAAADXJlbGF5LW5vZGUtdjIAAAANcmVsYXktY2VsbC12MgAAAAE5AAAAATIAAAABNAAAACAREREREREREREREREREREREREREREREREREREREREREQAAACAiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIgAAACAzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMwAAACBERERERERERERERERERERERERERERERERERERERERERAAAAaMYXFAAAAAAAQE",
+    "transcriptHash": "j9uQf1YXqHNcljQtxCGDIktj2H564ybjl25dHFES5xw",
+    "rootKey": "wBgvuvZkZIGrcjFYKmtKmjkq4q0bI6V719P5ygDIEc0",
+    "linkConfirmationMac": "iO5-kTURWJk-9Ate2d3i8A6_66hfrfNx-OrWWZwubso",
+    "controlKey": "I6SRtSmwky6IQXJV0GltsJT9EOY-QiA5H1rlPGmxgH0",
+    "channelKey": "QOpA7PubV7N2eYT0obzm6h60H5j3gSE44lKAEUKB4Bw",
+    "streamKey": "8u3RZhv6OS0ngKm_lrWC-wVFgk2TfJLyGZ8e6gWOURY",
+    "associatedData": "AAAAGXdlbnp3b3JrLXJlbW90ZS12Mi9yZWNvcmQAAAAObGluay12Mi1nb2xkZW4AAAARY2hhbm5lbC12Mi1nb2xkZW4AAAAQc3RyZWFtLXYyLWdvbGRlbgAAAAExAAAAATEAAAABOAAAAAAAAAAH",
+    "nonce": "MwboEQaxLDDpCpxGWqKRpQAAAAAAAAAH",
+    "ciphertext": "gixR9mFJrsX73Lc4etWe8XQms5wVon8GdC8AgM0iF7Te-FC4H5rSqg",
+    "rekeyRoot": "AIwS6L122YPs1KCmb_vv6j0RWz9MW3XsVdW2Sf6V3oM",
+    "canonicalRekeyInit": "AAAAGHdlbnp3b3JrLXJlbW90ZS12Mi9yZWtleQAAAARpbml0AAAADmxpbmstdjItZ29sZGVuAAAAD3Jla2V5LXYyLWdvbGRlbgAAAAEyAAAAIHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3",
+    "initSignature": "sXS_5mO13htUn9ppYQa4gsW_gPLLJti8h3oAyZ3BWl5RTOiwREmtcSWvPrNKCrgI1p9NppnXwDcHvHTzAevWBA",
+    "acceptSignature": "oWB0xKbX0wtyWmv8CHsgZUay-rOtxcmt5pzkQzSQw4qrNZe7eQeNKRy4bNVBIZSqmMCq8uyE-rjd6m9mYkuPAw",
+    "carrierProofSignature": "loHBl5fo-EyAiRO2N_ETDM4_3ovIiZ8fStm6FwjOLvNKrkbocB1OEkyf5LbPX9yarEPq6yF7VcQL7bam3vqKCQ"
+  }
+}

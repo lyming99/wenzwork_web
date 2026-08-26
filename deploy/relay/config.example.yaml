@@ -1,0 +1,24 @@
+installation_id: 00000000-0000-0000-0000-000000000000
+cell_id: 00000000-0000-0000-0000-000000000000
+version: 0.0.0
+protocol_version: 1
+directory_url: https://relay-directory.example.com
+# Relay data plane is always plaintext WS. Terminate WSS in Nginx or another
+# reverse proxy and forward it to this listener.
+listen_address: :8443
+health_address: 127.0.0.1:19090
+identity_private_key_file: /var/lib/wenzwork-relay/identity/identity.key
+certificate_file: /etc/wenzwork-relay/tls/node.crt
+ca_certificate_file: /etc/wenzwork-relay/tls/ca.crt
+# Data-plane settings are provisioned separately from the one-time Enrollment
+# Token. Keep this file root:wenzwork-relay 0640; never place these URLs in
+# command-line arguments or shell history.
+redis_url: rediss://relay-node:<password>@redis.internal:6379/0
+ticket_issuer: wenzwork-control
+ticket_public_key_files:
+  control-2026-01: /etc/wenzwork-relay/ticket-keys/control-2026-01.pem
+peer_ticket_public_key_files:
+  # Peer Session Ticket 使用独立密钥和独立验签集合，禁止跨用途签票。
+  control-peer-2026-01: /etc/wenzwork-relay/ticket-keys/control-peer-2026-01.pem
+connection_hard_limit: 10000
+handshake_concurrency: 128

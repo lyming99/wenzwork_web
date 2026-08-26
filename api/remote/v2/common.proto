@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package remote.v2;
+
+option go_package = "github.com/wenzwork/wenzwork-web/server/internal/generated/remote/v2;remotev2";
+
+// Direction is part of every key derivation, nonce and AEAD associated data.
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  DIRECTION_CLIENT_TO_DEVICE = 1;
+  DIRECTION_DEVICE_TO_CLIENT = 2;
+}
+
+// FrameType is authenticated as AEAD associated data. Values are append-only.
+enum FrameType {
+  FRAME_TYPE_UNSPECIFIED = 0;
+  FRAME_TYPE_CHANNEL_OPEN = 1;
+  FRAME_TYPE_CHANNEL_ACCEPT = 2;
+  FRAME_TYPE_CHANNEL_CLOSE = 3;
+  FRAME_TYPE_STREAM_OPEN = 4;
+  FRAME_TYPE_STREAM_DATA = 5;
+  FRAME_TYPE_STREAM_ACK = 6;
+  FRAME_TYPE_STREAM_CLOSE = 7;
+  FRAME_TYPE_RPC_REQUEST = 8;
+  FRAME_TYPE_RPC_RESPONSE = 9;
+  FRAME_TYPE_RPC_EVENT = 10;
+  FRAME_TYPE_FILE_MANIFEST = 11;
+  FRAME_TYPE_FILE_CHUNK = 12;
+  FRAME_TYPE_FILE_ACK = 13;
+  FRAME_TYPE_FILE_COMMIT = 14;
+  FRAME_TYPE_EVENT_SUBSCRIBE = 15;
+  FRAME_TYPE_EVENT_ACK = 16;
+  FRAME_TYPE_EVENT_RESUME = 17;
+  FRAME_TYPE_EVENT_RESET_REQUIRED = 18;
+  FRAME_TYPE_REKEY_INIT = 19;
+  FRAME_TYPE_REKEY_ACK = 20;
+  FRAME_TYPE_REKEY_COMMIT = 21;
+  FRAME_TYPE_LINK_CONFIRM = 22;
+  FRAME_TYPE_LINK_READY = 23;
+  FRAME_TYPE_LINK_LEASE_RENEW = 24;
+  FRAME_TYPE_LINK_LEASE_RENEWED = 25;
+}
+
+enum ChannelKind {
+  CHANNEL_KIND_UNSPECIFIED = 0;
+  CHANNEL_KIND_DEVICE_QUERY = 1;
+  CHANNEL_KIND_PROJECT = 2;
+}
+
+enum StreamKind {
+  STREAM_KIND_UNSPECIFIED = 0;
+  STREAM_KIND_RPC = 1;
+  STREAM_KIND_FILE = 2;
+  STREAM_KIND_EVENT = 3;
+  // A long-lived, full-duplex terminal data plane. Terminal payloads use
+  // FRAME_TYPE_STREAM_DATA so Relay can schedule them as interactive traffic
+  // without observing the end-to-end encrypted PTY bytes.
+  STREAM_KIND_TERMINAL = 4;
+}
+
+enum ProtocolErrorCode {
+  PROTOCOL_ERROR_CODE_UNSPECIFIED = 0;
+  PROTOCOL_ERROR_CODE_UNSUPPORTED_VERSION = 1;
+  PROTOCOL_ERROR_CODE_FRAME_INVALID = 2;
+  PROTOCOL_ERROR_CODE_GRANT_INVALID = 3;
+  PROTOCOL_ERROR_CODE_GRANT_REPLAYED = 4;
+  PROTOCOL_ERROR_CODE_ROUTE_STALE = 5;
+  PROTOCOL_ERROR_CODE_IDENTITY_INVALID = 6;
+  PROTOCOL_ERROR_CODE_AUTHENTICATION_FAILED = 7;
+  PROTOCOL_ERROR_CODE_BACKPRESSURE = 8;
+  PROTOCOL_ERROR_CODE_STREAM_NOT_FOUND = 9;
+  PROTOCOL_ERROR_CODE_STREAM_CANCELLED = 10;
+  PROTOCOL_ERROR_CODE_RESUME_EXPIRED = 11;
+  PROTOCOL_ERROR_CODE_REKEY_CONFLICT = 12;
+  PROTOCOL_ERROR_CODE_REKEY_REQUIRED = 13;
+  PROTOCOL_ERROR_CODE_REVOKED = 14;
+}
+
+// EncryptedRecord is the only form used for project, RPC, file and event
+// data. Relay may route this record but must never decode its ciphertext.
+message EncryptedRecord {
+  string link_id = 101;
+  string channel_id = 102;
+  string stream_id = 103;
+  uint64 key_id = 104;
+  Direction direction = 105;
+  FrameType frame_type = 106;
+  uint64 stream_sequence = 107;
+  bytes ciphertext = 108;
+}

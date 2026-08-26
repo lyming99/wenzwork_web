@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package remote.v1;
+
+option go_package = "github.com/wenzwork/wenzwork-web/server/internal/generated/remote/v1;remotev1";
+
+import "google/protobuf/timestamp.proto";
+
+message AuthChallenge {
+  bytes nonce = 1;
+  string relay_node_id = 2;
+  string relay_cell_id = 3;
+  google.protobuf.Timestamp deadline = 4;
+}
+
+message AuthProof {
+  string ticket_jti = 1;
+  uint64 connection_epoch = 2;
+  bytes device_signature = 3;
+}
+
+message Ready {
+  string connection_id = 1;
+  uint64 accepted_connection_epoch = 2;
+  uint32 heartbeat_interval_seconds = 3;
+  uint32 control_frame_limit_bytes = 4;
+  uint32 absolute_frame_limit_bytes = 5;
+}
+
+message Ping {
+  uint64 monotonic_millis = 1;
+}
+
+message Pong {
+  uint64 monotonic_millis = 1;
+}
+
+enum GoAwayReason {
+  GO_AWAY_REASON_UNSPECIFIED = 0;
+  GO_AWAY_REASON_NODE_DRAINING = 1;
+  GO_AWAY_REASON_CELL_DRAINING = 2;
+  GO_AWAY_REASON_ASSIGNMENT_CHANGED = 3;
+  GO_AWAY_REASON_GRANT_REVOKED = 4;
+  GO_AWAY_REASON_SERVER_OVERLOADED = 5;
+  GO_AWAY_REASON_ENDPOINT_CHANGED = 6;
+}
+
+message GoAway {
+  GoAwayReason reason = 1;
+  uint32 reconnect_after_millis = 2;
+  bool refresh_assignment = 3;
+}

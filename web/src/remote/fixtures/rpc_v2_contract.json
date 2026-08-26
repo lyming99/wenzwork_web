@@ -1,0 +1,1096 @@
+{
+  "aiV2Contract": {
+    "absolutePathForbidden": true,
+    "agentLoopFeatureFlag": "ai.agentLoop",
+    "agentLoopMinimumFeatureVersion": 6,
+    "approvalDecisions": [
+      "deny",
+      "allowOnce",
+      "allowForSession"
+    ],
+    "attachmentReferenceFields": [
+      "id",
+      "relativePath",
+      "name",
+      "mimeType",
+      "size",
+      "sha256",
+      "revision"
+    ],
+    "cancelSupportsKeepInbox": true,
+    "chatMethods": [
+      "conversation.list",
+      "conversation.get",
+      "conversation.create",
+      "conversation.fork",
+      "conversation.rename",
+      "conversation.delete",
+      "conversation.search",
+      "conversation.messages.before",
+      "conversation.send",
+      "conversation.cancel",
+      "conversation.inbox.list",
+      "conversation.inbox.replace",
+      "conversation.inbox.remove",
+      "conversation.inbox.clear",
+      "conversation.plan.set",
+      "conversation.goal.create",
+      "conversation.goal.edit",
+      "conversation.goal.pause",
+      "conversation.goal.resume",
+      "conversation.goal.clear",
+      "conversation.subagents.list",
+      "conversation.subagent.message",
+      "conversation.subagent.interrupt",
+      "conversation.regenerate",
+      "conversation.events"
+    ],
+    "chatScope": "remote.peer.ai.chat",
+    "collaborationMinimumFeatureVersion": 7,
+    "commandSandboxFeatureFlag": "ai.commandSandbox",
+    "compareAndSwapRequired": true,
+    "configMethods": [
+      "ai.config.list",
+      "ai.config.get",
+      "ai.config.update",
+      "ai.config.delete",
+      "ai.config.test",
+      "ai.config.models",
+      "ai.config.reasoning-efforts"
+    ],
+    "configProjectRequired": false,
+    "configRequiredFields": [
+      "id",
+      "revision",
+      "name",
+      "provider",
+      "baseUrl",
+      "nonSecretHeaders",
+      "model",
+      "systemPrompt",
+      "temperature",
+      "reasoningEffort",
+      "maxTurnOutputTokens",
+      "maxActiveContextTokens",
+      "maxAgentRounds",
+      "maxAgentToolCalls",
+      "maxAgentNoProgressRounds",
+      "requestTimeoutSeconds",
+      "maxRetries",
+      "retryBaseDelayMilliseconds",
+      "showUsage",
+      "enabled",
+      "secretConfigured"
+    ],
+    "configScope": "remote.peer.ai.config",
+    "conversationProjectRequired": true,
+    "conversationRequiredFields": [
+      "id",
+      "projectId",
+      "revision",
+      "title",
+      "configId",
+      "modelBinding",
+      "workspaceMode",
+      "lastMessageSequence",
+      "createdAt",
+      "updatedAt",
+      "planModeActive",
+      "todos",
+      "goal",
+      "goalArmed"
+    ],
+    "durableInboxFeatureFlag": "ai.durableInbox",
+    "featureFlag": "ai.v2",
+    "featureVersionKey": "ai",
+    "goalFeatureFlag": "ai.goal",
+    "goalMinimumFeatureVersion": 8,
+    "goalPhases": [
+      "active",
+      "paused",
+      "blocked",
+      "complete"
+    ],
+    "inboxDestinations": [
+      "nextTurn",
+      "nextStep"
+    ],
+    "legacyWorkspaceWriteValues": [
+      "edit"
+    ],
+    "messageRequiredFields": [
+      "id",
+      "revision",
+      "sequence",
+      "role",
+      "content",
+      "status",
+      "errorCode",
+      "attachments",
+      "reasoning",
+      "toolRuns",
+      "usage",
+      "providerRun",
+      "createdAt"
+    ],
+    "messageStatuses": [
+      "complete",
+      "streaming",
+      "stopped",
+      "failed"
+    ],
+    "minimumFeatureVersion": 2,
+    "monotonicEventSequence": true,
+    "permissionModesFeatureFlag": "ai.permissionModes",
+    "permissionModesMinimumFeatureVersion": 4,
+    "persistedEventReplay": true,
+    "persistentTerminalFeatureFlag": "ai.persistentTerminal",
+    "planModeFeatureFlag": "ai.planMode",
+    "providers": [
+      "openai",
+      "anthropic",
+      "google",
+      "deepseek",
+      "ollama",
+      "openai-compatible"
+    ],
+    "secretActions": [
+      "keep",
+      "replace",
+      "clear"
+    ],
+    "sensitiveBodyChannel": "peer-rpc",
+    "streamEvents": [
+      "chat.text.delta",
+      "chat.reasoning.delta",
+      "chat.tool.status",
+      "chat.approval.requested",
+      "chat.usage",
+      "chat.completed",
+      "chat.failed",
+      "chat.cancelled",
+      "chat.goal.changed",
+      "chat.plan_mode.changed",
+      "chat.todo.updated",
+      "chat.subagent.started",
+      "chat.subagent.status",
+      "chat.subagent.message"
+    ],
+    "subagentMaximumActiveChildren": 3,
+    "subagentMaximumDepth": 3,
+    "subagentStatuses": [
+      "running",
+      "ready",
+      "completed",
+      "failed",
+      "interrupted"
+    ],
+    "subagentsFeatureFlag": "ai.subagents",
+    "todoFeatureFlag": "ai.todo",
+    "todoStatuses": [
+      "pending",
+      "in_progress",
+      "completed"
+    ],
+    "toolOnlyMethods": [
+      "conversation.approval.respond",
+      "conversation.question.answer"
+    ],
+    "tools": [
+      "list_files",
+      "search_files",
+      "read_file",
+      "read_tool_result",
+      "read_image",
+      "web_search",
+      "web_fetch",
+      "terminal_open",
+      "terminal_send",
+      "terminal_read",
+      "terminal_signal",
+      "terminal_close",
+      "terminal_list",
+      "write_file",
+      "replace_in_file",
+      "rollback_file_change",
+      "run_command",
+      "get_goal",
+      "create_goal",
+      "update_goal",
+      "todo_write",
+      "exit_plan_mode",
+      "ask_user_question",
+      "skill",
+      "spawn_agent",
+      "subagent_fork",
+      "list_agents",
+      "send_message",
+      "interrupt_agent",
+      "job_list",
+      "job_output",
+      "job_kill"
+    ],
+    "toolsScope": "remote.peer.ai.tools",
+    "workspaceModes": [
+      "readOnly",
+      "workspaceWrite",
+      "fullAccess"
+    ],
+    "workspaceToolIntentDurable": true,
+    "workspaceToolIntentField": "enableWorkspaceTools",
+    "workspaceToolIntentMethods": [
+      "conversation.send",
+      "conversation.regenerate",
+      "conversation.goal.create",
+      "conversation.goal.edit",
+      "conversation.goal.pause",
+      "conversation.goal.resume",
+      "conversation.goal.clear",
+      "conversation.subagent.message"
+    ],
+    "workspaceToolIntentScope": "remote.peer.ai.tools"
+  },
+  "aiV3GenerationRecoveryContract": {
+    "attach": {
+      "cacheReplayEvents": false,
+      "detach": "peer-cancel-query-only",
+      "durableAfterRoute": false,
+      "live": true,
+      "method": "conversation.generation.attach",
+      "projectRequired": true,
+      "requestFields": [
+        "conversationId",
+        "generationId",
+        "afterSequence"
+      ],
+      "resetRequiredOnCursorExpiredOrQueueOverflow": true,
+      "responseFields": [
+        "accepted",
+        "conversationId",
+        "generationId",
+        "revision",
+        "replayed",
+        "resetRequired",
+        "highWatermark",
+        "reason"
+      ],
+      "scope": "remote.peer.ai.chat",
+      "streamEvents": [
+        "chat.text.delta",
+        "chat.reasoning.delta",
+        "chat.tool.status",
+        "chat.approval.requested",
+        "chat.usage",
+        "chat.completed",
+        "chat.failed",
+        "chat.cancelled",
+        "chat.goal.changed",
+        "chat.plan_mode.changed",
+        "chat.todo.updated",
+        "chat.subagent.started",
+        "chat.subagent.status",
+        "chat.subagent.message"
+      ]
+    },
+    "featureFlag": "ai.generationRecovery",
+    "featureVersionKey": "ai",
+    "limits": {
+      "conversationSubscriptionCount": 4,
+      "queueBytes": 524288,
+      "queueCount": 256,
+      "subscriptionCount": 8
+    },
+    "minimumFeatureVersion": 3,
+    "projectEventHints": {
+      "allowedTypes": [
+        "conversation.changed",
+        "conversation.events.available"
+      ],
+      "contentFree": true,
+      "forbiddenPayloadFields": [
+        "prompt",
+        "content",
+        "delta",
+        "reasoning",
+        "toolArguments",
+        "toolOutput",
+        "attachments"
+      ]
+    },
+    "regenerate": {
+      "generationIdEqualsRequestId": true,
+      "method": "conversation.regenerate",
+      "projectRequired": true,
+      "requestFields": [
+        "conversationId",
+        "messageId",
+        "regenerationRequestId",
+        "workspaceMode",
+        "enableWorkspaceTools"
+      ],
+      "scope": "remote.peer.ai.chat",
+      "stableRequestIdRequired": true
+    },
+    "snapshot": {
+      "consistentReadTransaction": true,
+      "legacyWatermarkField": "eventHighWatermark",
+      "method": "conversation.get",
+      "projectRequired": true,
+      "requiredFields": [
+        "conversation",
+        "messages",
+        "snapshotEventHighWatermark",
+        "earliestAvailableEventSequence"
+      ]
+    }
+  },
+  "capabilityContract": {
+    "method": "agent.capabilities.get",
+    "projectRequired": false,
+    "requiredFields": [
+      "agentBuildId",
+      "connectionEpoch",
+      "capabilityVersion",
+      "protocol.minimum",
+      "protocol.maximum",
+      "featureVersions",
+      "features",
+      "platform.os",
+      "platform.arch",
+      "shells",
+      "taskRunners",
+      "resourceLimits",
+      "taskLogMetrics",
+      "remoteV2Resources",
+      "remoteOperationJournal"
+    ],
+    "scope": "remote.peer.query"
+  },
+  "collaborationEventContract": {
+    "acceptedEventKinds": [
+      "chat.goal.changed",
+      "chat.plan_mode.changed",
+      "chat.todo.updated",
+      "chat.subagent.started",
+      "chat.subagent.status",
+      "chat.subagent.message"
+    ],
+    "featureFlag": "events.collaboration.v1",
+    "legacyDefaultExcludesCollaborationEvents": true,
+    "replayUsesNegotiatedKinds": true,
+    "requestFields": [
+      "eventContractVersion",
+      "acceptedEventKinds"
+    ],
+    "version": 1
+  },
+  "compatibilityContract": {
+    "matrix": [
+      {
+        "agentGeneration": "v1",
+        "capabilityQueryRequired": false,
+        "clientGeneration": "v1",
+        "expectedMode": "legacy-only",
+        "fallback": "none",
+        "mustNotCrash": true,
+        "newMethodsAllowed": false
+      },
+      {
+        "agentGeneration": "v2",
+        "capabilityQueryRequired": false,
+        "clientGeneration": "v1",
+        "expectedMode": "legacy-on-v2-agent",
+        "fallback": "v1-retained",
+        "mustNotCrash": true,
+        "newMethodsAllowed": false
+      },
+      {
+        "agentGeneration": "v1",
+        "capabilityQueryRequired": true,
+        "clientGeneration": "v2",
+        "expectedMode": "safe-degrade",
+        "fallback": "legacy-authorized-only",
+        "mustNotCrash": true,
+        "newMethodsAllowed": false
+      },
+      {
+        "agentGeneration": "v2",
+        "capabilityQueryRequired": true,
+        "clientGeneration": "v2",
+        "expectedMode": "capability-gated-v2",
+        "fallback": "per-capability",
+        "mustNotCrash": true,
+        "newMethodsAllowed": true
+      }
+    ],
+    "metrics": {
+      "capabilityVersions": [
+        "files.v1",
+        "files.v2",
+        "terminal.v1",
+        "terminal.v2",
+        "tasks.v1",
+        "tasks.v2",
+        "ai.v1",
+        "ai.v2"
+      ],
+      "forbiddenDimensions": [
+        "userId",
+        "deviceId",
+        "projectId",
+        "projectName",
+        "path",
+        "command",
+        "prompt",
+        "response",
+        "fileDigest"
+      ],
+      "requiredFields": [
+        "capabilityVersion",
+        "errorCode",
+        "callCount",
+        "totalDurationMilliseconds"
+      ],
+      "successErrorCode": "ok"
+    }
+  },
+  "contractVersion": 6,
+  "deadline": "2099-01-02T03:04:05.006Z",
+  "domainContracts": [
+    {
+      "channel": "peer-rpc",
+      "contractVersion": 2,
+      "domain": "project",
+      "featureFlag": "project.v2",
+      "featureVersionKey": "projects",
+      "projectRequired": false,
+      "representativeMethod": "project.list",
+      "scope": "remote.peer.query"
+    },
+    {
+      "channel": "peer-rpc",
+      "contractVersion": 2,
+      "domain": "file",
+      "featureFlag": "file.v2",
+      "featureVersionKey": "files",
+      "projectRequired": true,
+      "representativeMethod": "file.list",
+      "scope": "remote.peer.file.receive"
+    },
+    {
+      "channel": "peer-rpc",
+      "contractVersion": 4,
+      "domain": "terminal",
+      "featureFlag": "terminal.interactive",
+      "featureVersionKey": "terminal",
+      "projectRequired": true,
+      "representativeMethod": "terminal.open",
+      "scope": "remote.peer.terminal.interactive"
+    },
+    {
+      "channel": "peer-rpc",
+      "contractVersion": 3,
+      "domain": "task",
+      "featureFlag": "tasks.v2",
+      "featureVersionKey": "tasks",
+      "projectRequired": true,
+      "representativeMethod": "task.update",
+      "scope": "remote.peer.task.control"
+    },
+    {
+      "channel": "peer-rpc",
+      "contractVersion": 2,
+      "domain": "ai",
+      "featureFlag": "ai.v2",
+      "featureVersionKey": "ai",
+      "projectRequired": true,
+      "representativeMethod": "conversation.send",
+      "scope": "remote.peer.ai.chat"
+    }
+  ],
+  "eventV1Contract": {
+    "completionReasons": [
+      "clientCancel",
+      "sessionRenewal",
+      "deadline",
+      "reset",
+      "agentShutdown",
+      "policyRevoked"
+    ],
+    "featureFlag": "events.v1",
+    "featureVersionKey": "events",
+    "forbiddenPayloadFields": [
+      "prompt",
+      "content",
+      "reasoning",
+      "toolArguments",
+      "toolOutput",
+      "taskDefinition",
+      "command",
+      "logContent",
+      "path",
+      "accessToken",
+      "ticket",
+      "secret"
+    ],
+    "heartbeatExample": {
+      "highWatermark": 846,
+      "projectId": "11111111-1111-4111-8111-111111111111",
+      "schemaVersion": 1,
+      "type": "subscription.heartbeat"
+    },
+    "limits": {
+      "heartbeatMaximumSeconds": 60,
+      "heartbeatMinimumSeconds": 15,
+      "payloadBytes": 4096,
+      "projectSubscriptionCount": 4,
+      "queueBytes": 524288,
+      "queueCount": 256,
+      "replayCount": 4096,
+      "subscriptionCount": 8
+    },
+    "method": "event.subscribe",
+    "minimumFeatureVersion": 1,
+    "projectRequired": true,
+    "readOnlyMethods": [
+      "event.subscribe",
+      "agent.capabilities.get"
+    ],
+    "readyExample": {
+      "heartbeatSeconds": 20,
+      "highWatermark": 846,
+      "minimumAvailableSequence": 600,
+      "projectId": "11111111-1111-4111-8111-111111111111",
+      "resetReason": "",
+      "resetRequired": false,
+      "schemaVersion": 1,
+      "supportedTopics": [
+        "agent",
+        "capabilities",
+        "conversation",
+        "message",
+        "task",
+        "taskLog",
+        "workflow"
+      ],
+      "type": "subscription.ready"
+    },
+    "replayCache": "disabled",
+    "rpcEventKinds": {
+      "agentStateChanged": 14,
+      "subscriptionControl": 13
+    },
+    "scope": "remote.peer.events",
+    "sequenceRules": {
+      "controlSequence": 0,
+      "cursorPersistAfterSuccessfulDomainSync": true,
+      "delivery": "ordered-at-least-once",
+      "gapRequiresReconcile": true,
+      "resetRequiredOnRetentionOrSlowConsumer": true
+    },
+    "stateExample": {
+      "aggregateId": "33333333-3333-4333-8333-333333333333",
+      "aggregateType": "task",
+      "cursor": {
+        "kind": "task_changes",
+        "value": 918
+      },
+      "data": {
+        "status": "running"
+      },
+      "operation": "upsert",
+      "projectId": "11111111-1111-4111-8111-111111111111",
+      "revision": 27,
+      "schemaVersion": 1,
+      "topic": "task",
+      "type": "task.changed"
+    }
+  },
+  "expectedBase64Url": "CAFSiwEKbgokMjIyMjIyMjItMjIyMi00MjIyLTgyMjItMjIyMjIyMjIyMjIyEhFycGMtY29udHJhY3QtMDAwMRgHIgsIpcCalQ8QgJvuAiokMTExMTExMTEtMTExMS00MTExLTgxMTEtMTExMTExMTExMTExUglmaWxlLmxpc3RaDnsicGF0aCI6InNyYyJ9",
+  "expectedRevision": 7,
+  "fileV2Contract": {
+    "chunkBytes": 32768,
+    "entryRequiredFields": [
+      "id",
+      "revision",
+      "name",
+      "relativePath",
+      "kind",
+      "category",
+      "extension",
+      "size",
+      "modifiedAt",
+      "readable",
+      "writable"
+    ],
+    "featureFlag": "file.v2",
+    "featureVersionKey": "files",
+    "legacyUnboundReadOnlyMethods": [
+      "file.list",
+      "file.stat",
+      "file.read-text",
+      "file.download.prepare",
+      "file.download.chunk",
+      "file.download.complete"
+    ],
+    "managedFileMaximumBytes": 0,
+    "minimumFeatureVersion": 2,
+    "projectRequired": true,
+    "readMethods": [
+      "file.list",
+      "file.stat",
+      "file.details",
+      "file.search",
+      "file.read-text",
+      "file.download.prepare",
+      "file.download.chunk",
+      "file.download.complete"
+    ],
+    "readScope": "remote.peer.file.receive",
+    "recursiveDelete": {
+      "commitMethod": "file.delete",
+      "expectedRevisionRequired": true,
+      "featureFlag": "recursiveDelete.confirmed",
+      "oneTimeConfirmationTokenRequired": true,
+      "prepareMethod": "file.delete.prepare"
+    },
+    "textMaximumBytes": 524288,
+    "writeMethods": [
+      "file.create-text",
+      "file.write-text",
+      "file.mkdir",
+      "file.rename",
+      "file.move",
+      "file.delete.prepare",
+      "file.delete",
+      "file.upload.prepare",
+      "file.upload.chunk",
+      "file.upload.complete"
+    ],
+    "writeScope": "remote.peer.file.send"
+  },
+  "fixtureVersion": 1,
+  "idempotencyKey": "rpc-contract-0001",
+  "input": {
+    "path": "src"
+  },
+  "limits": {
+    "aiEventReplayResponseBytes": 49152,
+    "peerPlaintextBytes": 61440,
+    "rpcJsonBytes": 57344,
+    "rpcPreferredPageBytes": 49152
+  },
+  "method": "file.list",
+  "projectId": "11111111-1111-4111-8111-111111111111",
+  "projectMismatch": {
+    "code": 9,
+    "retryable": false,
+    "safeMessage": "project is not authorized for this session"
+  },
+  "protocolErrorCodes": [
+    "authorization_required",
+    "incompatible_agent",
+    "protocol_binding_invalid",
+    "protocol_invalid",
+    "rpc_payload_too_large",
+    "rpc_response_invalid",
+    "session_unavailable",
+    "transport_unavailable"
+  ],
+  "protocolFailureReasons": [
+    "host_session_json_invalid",
+    "relay_subprotocol_mismatch",
+    "relay_protocol_version_invalid",
+    "relay_handshake_frame_invalid",
+    "relay_envelope_invalid",
+    "relay_frame_kind_unknown",
+    "peer_binding_invalid",
+    "peer_epoch_stale",
+    "peer_ciphertext_size_invalid",
+    "peer_ciphertext_auth_failed",
+    "peer_nonce_invalid",
+    "rpc_protocol_version_invalid",
+    "rpc_envelope_invalid",
+    "rpc_envelope_too_large",
+    "rpc_message_kind_unknown",
+    "rpc_json_invalid_utf8",
+    "rpc_json_invalid",
+    "rpc_json_too_large",
+    "rpc_model_invalid",
+    "rpc_event_kind_unknown"
+  ],
+  "protocolVersion": 1,
+  "remoteProjectCreate": {
+    "allowedInputFields": [
+      "name",
+      "displayName",
+      "gitUrl",
+      "directoryId",
+      "parentDirectoryId"
+    ],
+    "channel": "peer-rpc",
+    "featureFlag": "project.remoteCreate",
+    "featureVersionKey": "projects",
+    "forbiddenInputFields": [
+      "path",
+      "projectId",
+      "relativePath"
+    ],
+    "method": "project.create",
+    "minimumFeatureVersion": 2,
+    "projectRequired": false,
+    "scope": "remote.peer.query"
+  },
+  "remoteProjectRemove": {
+    "allowedInputFields": [
+      "projectId",
+      "expectedRevision"
+    ],
+    "blockingRelations": [
+      "ai_conversations.generating",
+      "tasks.non_terminal"
+    ],
+    "channel": "peer-rpc",
+    "expectedRevisionRequired": true,
+    "featureFlag": "project.remoteRemove",
+    "featureVersionKey": "projects",
+    "method": "project.remove",
+    "minimumFeatureVersion": 3,
+    "projectRequired": false,
+    "scope": "remote.peer.query",
+    "softDeleteOnly": true
+  },
+  "requestId": "22222222-2222-4222-8222-222222222222",
+  "rpcEventKinds": {
+    "agent.state.changed": 14,
+    "chat.approval.requested": 10,
+    "chat.cancelled": 12,
+    "chat.completed": 2,
+    "chat.failed": 3,
+    "chat.goal.changed": 15,
+    "chat.plan_mode.changed": 16,
+    "chat.reasoning.delta": 8,
+    "chat.subagent.message": 20,
+    "chat.subagent.started": 18,
+    "chat.subagent.status": 19,
+    "chat.text.delta": 1,
+    "chat.todo.updated": 17,
+    "chat.tool.status": 9,
+    "chat.usage": 11,
+    "event.subscription.control": 13,
+    "resource.changed": 4,
+    "resource.tombstone": 5,
+    "terminal.exit": 7,
+    "terminal.output": 6
+  },
+  "sequencerLifecycleContract": {
+    "capacityBehavior": "rekey-or-close-link",
+    "closeRejectsLateFrames": true,
+    "maximumStreamsPerLink": 131072,
+    "minimumTombstoneSeconds": 300,
+    "retireWithKey": true,
+    "streamIdReuseForbidden": true,
+    "tombstoneLimit": 8192
+  },
+  "taskLogV1Contract": {
+    "absolutePathForbidden": true,
+    "bulkDownloadFeatureFlag": "taskLogs.bulkDownload",
+    "download": {
+      "acknowledgedResume": true,
+      "chunkBytes": 32768,
+      "hash": "sha256",
+      "immutablePreparedPrefix": true,
+      "maximumBytes": 67108864,
+      "peerSessionBound": true,
+      "prepareMethod": "task.logs.download.prepare",
+      "requestFields": [
+        "taskId",
+        "runId",
+        "generation",
+        "transferId"
+      ],
+      "responseFields": [
+        "transferId",
+        "fileName",
+        "size",
+        "sha256",
+        "chunkSize",
+        "generation",
+        "snapshot",
+        "sealed",
+        "expiresAt"
+      ],
+      "sourceKind": "taskLog",
+      "streamKind": "file"
+    },
+    "event": {
+      "contentFree": true,
+      "cursorKind": "task_log_bytes",
+      "dataFields": [
+        "runId",
+        "generation",
+        "highWatermark"
+      ],
+      "invalidateOnGenerationChange": true,
+      "type": "task.logs.available"
+    },
+    "featureVersionKey": "taskLogs",
+    "legacyReadScope": "remote.task.read",
+    "minimumFeatureVersion": 1,
+    "peerScope": "remote.peer.task.control",
+    "projectRequired": true,
+    "runProjectionFields": [
+      "logAvailable",
+      "logState",
+      "logGeneration",
+      "logFormatVersion",
+      "logSizeBytes"
+    ],
+    "seek": {
+      "boundedRead": true,
+      "completePhysicalRecords": true,
+      "cursorUnit": "utf8-file-bytes",
+      "maximumBytes": 32768,
+      "method": "task.logs",
+      "mutuallyExclusiveCursorFields": [
+        "offset",
+        "tailBytes",
+        "beforeOffset"
+      ],
+      "requestFields": [
+        "taskId",
+        "runId",
+        "generation",
+        "offset",
+        "tailBytes",
+        "beforeOffset",
+        "limitBytes"
+      ],
+      "responseFields": [
+        "taskId",
+        "runId",
+        "generation",
+        "formatVersion",
+        "logState",
+        "content",
+        "startOffset",
+        "nextOffset",
+        "fileSize",
+        "eof",
+        "hasMoreBefore",
+        "sealed",
+        "cursorAdjusted",
+        "resetRequired"
+      ],
+      "responseMaximumBytes": 49152
+    },
+    "seekFeatureFlag": "taskLogs.fileSeek",
+    "sqliteBodyForbidden": true,
+    "stableErrors": [
+      "INVALID_ARGUMENT",
+      "NOT_FOUND",
+      "PROJECT_MISMATCH",
+      "LOG_EXPIRED",
+      "LOG_MIGRATING",
+      "LOG_CORRUPT",
+      "UPGRADE_REQUIRED"
+    ],
+    "wholeRunRetention": true
+  },
+  "taskPayloadV2Contract": {
+    "chunkBytes": 32768,
+    "commitIdempotencyRequired": true,
+    "featureFlag": "taskPayload.v2",
+    "hash": "sha256",
+    "inlineMaximumBytes": 57344,
+    "maximumTransfers": 8,
+    "methods": [
+      "task.payload.prepare",
+      "task.payload.chunk",
+      "task.payload.commit",
+      "task.payload.abort"
+    ],
+    "quotaBytes": 8388608,
+    "reconnectResume": true,
+    "scope": "remote.peer.task.control",
+    "sequentialOffsets": true,
+    "totalMaximumBytes": 524288,
+    "ttlSeconds": 900,
+    "version": 2
+  },
+  "taskV2Contract": {
+    "compareAndSwapRequired": true,
+    "definitionMaximumBytes": 524288,
+    "featureFlag": "tasks.v2",
+    "featureVersionKey": "tasks",
+    "kinds": [
+      "codex",
+      "cursor",
+      "hermes",
+      "jcode",
+      "opencode",
+      "claude",
+      "kimi",
+      "pi",
+      "script",
+      "workflow"
+    ],
+    "logBytesGlobal": 268435456,
+    "logBytesPerTask": 16777216,
+    "logEncodings": [
+      "utf-8",
+      "base64"
+    ],
+    "logEntryMaximumBytes": 65536,
+    "logLineMaximumBytes": 1024,
+    "logTailDefaultLines": 100,
+    "methods": [
+      "task.list",
+      "task.get",
+      "task.runs",
+      "task.create",
+      "task.update",
+      "task.start",
+      "task.stop",
+      "task.cancel",
+      "task.retry",
+      "task.accept",
+      "task.undo-acceptance",
+      "task.follow-up",
+      "task.delete",
+      "task.clear",
+      "task.queue.start",
+      "task.queue.stop",
+      "task.logs",
+      "task.logs.download.prepare"
+    ],
+    "minimumFeatureVersion": 2,
+    "projectRequired": true,
+    "resetRequiredOnEviction": true,
+    "scope": "remote.peer.task.control",
+    "sensitiveBodyChannel": "peer-rpc",
+    "statuses": [
+      "queued",
+      "waiting",
+      "running",
+      "awaitingAcceptance",
+      "changesRequested",
+      "completed",
+      "failed",
+      "blocked",
+      "cancelled",
+      "succeeded"
+    ],
+    "workflowEdgeTypes": [
+      "onSuccess",
+      "onFailure",
+      "always"
+    ],
+    "workflowFailurePolicies": [
+      "stopOnFailure",
+      "continueOnFailure"
+    ],
+    "workflowFeatureFlag": "workflow.v2",
+    "workflowFeatureVersionKey": "workflows",
+    "workflowMaximumEdges": 512,
+    "workflowMaximumNodes": 128,
+    "workflowMaximumParallelism": 64,
+    "workflowMethods": [
+      "workflow.validate",
+      "workflow.create",
+      "workflow.get",
+      "workflow.revisions",
+      "workflow.revision.get",
+      "workflow.revision.publish",
+      "workflow.run.get",
+      "workflow.node.retry"
+    ],
+    "workflowMinimumFeatureVersion": 2,
+    "workflowNodeStatuses": [
+      "pending",
+      "ready",
+      "running",
+      "succeeded",
+      "failed",
+      "blocked",
+      "cancelled",
+      "skipped"
+    ],
+    "workflowNodeTypes": [
+      "start",
+      "task",
+      "finish"
+    ]
+  },
+  "terminalV3Contract": {
+    "attachBurst": 2,
+    "attachCompletionReasons": [
+      "events",
+      "timeout",
+      "exit",
+      "reset"
+    ],
+    "attachMaximumPerMinute": 6,
+    "attachMaximumWaitSeconds": 30,
+    "attachResponseDiagnosticFields": [
+      "completionReason",
+      "heldMilliseconds",
+      "eventCount"
+    ],
+    "attachWaitSeconds": 25,
+    "disconnectGraceSeconds": 300,
+    "duplexCumulativeInputAck": true,
+    "duplexFeatureFlag": "terminal.duplexStream",
+    "duplexFrameType": "streamData",
+    "duplexInputWindowBytes": 32768,
+    "duplexKeepAliveCreditBytes": 0,
+    "duplexKeepAliveFeatureFlag": "terminal.duplexKeepAlive",
+    "duplexKeepAliveSeconds": 120,
+    "duplexKeepAliveThroughSequence": 0,
+    "duplexMinimumFeatureVersion": 4,
+    "duplexOutputByteCredit": true,
+    "duplexOutputWindowBytes": 65536,
+    "duplexRawBytes": true,
+    "duplexResumeFields": [
+      "afterOutputSequence",
+      "afterInputSequence",
+      "afterResizeSequence"
+    ],
+    "duplexStreamKind": "terminal",
+    "events": [
+      "terminal.output",
+      "terminal.exit"
+    ],
+    "featureFlag": "terminal.interactive",
+    "featureVersionKey": "terminal",
+    "idleSeconds": 0,
+    "legacyMethod": "terminal.execute",
+    "legacyScope": "remote.peer.terminal",
+    "lifetimeSeconds": 0,
+    "longPollFeatureFlag": "terminal.attachLongPoll",
+    "maximumSessions": 8,
+    "maximumSessionsPerProject": 4,
+    "methods": [
+      "terminal.open",
+      "terminal.attach",
+      "terminal.write",
+      "terminal.resize",
+      "terminal.signal",
+      "terminal.close"
+    ],
+    "minimumFeatureVersion": 3,
+    "monotonicInputSequence": true,
+    "monotonicOutputSequence": true,
+    "outputEncoding": "base64url",
+    "projectRequired": true,
+    "resetRequiredOnEviction": true,
+    "ringBytes": 1048576,
+    "scope": "remote.peer.terminal.interactive",
+    "signals": [
+      "interrupt",
+      "eof",
+      "terminate"
+    ],
+    "singleAttachPerSession": true
+  }
+}

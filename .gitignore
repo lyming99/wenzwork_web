@@ -1,0 +1,35 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Frontend
+node_modules/
+web/node_modules/
+web/dist/
+web/coverage/
+dist/
+
+# Go
+server/bin/
+server/coverage.out
+server/*.test
+server/*.exe
+server/cache/
+
+# Local services and tooling
+.data/
+.tmp/
+.tools/
+.idea/
+.vscode/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+/.tmp-go-build
+/web/.vite-ssg-temp
+/%SystemDrive%
+.wenzwork/
+.dist/

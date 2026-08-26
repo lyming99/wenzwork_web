@@ -1,0 +1,51 @@
+name: wenzwork-dev
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: wenzwork
+      POSTGRES_USER: wenzwork
+      POSTGRES_PASSWORD: wenzwork_dev
+    ports:
+      - "54328:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wenzwork -d wenzwork"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - postgres18_data:/var/lib/postgresql
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "no", "--requirepass", "wenzwork_redis_dev"]
+    ports:
+      - "63798:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "wenzwork_redis_dev", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: wenzwork-dev
+      MINIO_ROOT_PASSWORD: local-development-only
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  postgres18_data:
+  minio_data:

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.wenzwork.device-agent</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__INSTALL_ROOT__/current/bin/wenzwork-device-agent</string>
+    <string>serve</string>
+    <string>--env-file</string>
+    <string>__ENV_FILE__</string>
+  </array>
+  <key>UserName</key><string>_wenzworkagent</string>
+  <key>GroupName</key><string>_wenzworkagent</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>5</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>/Library/Application Support/WenzWork/DeviceAgent/data/logs/agent.log</string>
+  <key>StandardErrorPath</key><string>/Library/Application Support/WenzWork/DeviceAgent/data/logs/agent.log</string>
+  <key>SoftResourceLimits</key>
+  <dict>
+    <key>NumberOfFiles</key><integer>65536</integer>
+    <key>NumberOfProcesses</key><integer>512</integer>
+  </dict>
+</dict>
+</plist>

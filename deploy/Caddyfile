@@ -1,0 +1,23 @@
+:8088 {
+  # WebSocket carriers must not inherit HTTP compression or response buffering.
+  # Caddy preserves Upgrade/Connection automatically; the explicit headers and
+  # long read/write deadlines keep this contract visible during audits.
+  @remote_v2 path /v2/connect
+  handle @remote_v2 {
+    reverse_proxy 127.0.0.1:8080 {
+      flush_interval -1
+      header_up Connection {http.request.header.Connection}
+      header_up Upgrade {http.request.header.Upgrade}
+      transport http {
+        compression off
+        read_timeout 2m
+        write_timeout 2m
+      }
+    }
+  }
+
+  handle {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8080
+  }
+}

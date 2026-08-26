@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package remote.v1;
+
+option go_package = "github.com/wenzwork/wenzwork-web/server/internal/generated/remote/v1;remotev1";
+
+import "remote/v1/command.proto";
+import "remote/v1/connection.proto";
+import "remote/v1/file.proto";
+import "remote/v1/peer.proto";
+
+// Envelope is the only top-level WebSocket message. The authenticated Relay
+// connection, rather than device-controlled payload fields, supplies the user
+// and device identity used for routing and authorization.
+message Envelope {
+  uint32 protocol_version = 1;
+  bytes frame_id = 2;
+  uint64 connection_epoch = 3;
+  uint64 sequence = 4;
+
+  oneof frame {
+    AuthChallenge auth_challenge = 10;
+    AuthProof auth_proof = 11;
+    Ready ready = 12;
+    Ping ping = 13;
+    Pong pong = 14;
+    GoAway go_away = 15;
+    Command command = 20;
+    CommandReceived command_received = 21;
+    CommandAccepted command_accepted = 22;
+    DeviceEvent device_event = 23;
+    EventTransportAck event_transport_ack = 24;
+    PeerOpen peer_open = 30;
+    PeerReady peer_ready = 31;
+    PeerCiphertext peer_query = 32;
+    PeerCiphertext peer_delta = 33;
+    PeerCiphertext peer_complete = 34;
+    PeerCiphertext peer_cancel = 35;
+    PeerError peer_error = 36;
+    FileOpen file_open = 40;
+    FileAccept file_accept = 41;
+    FileReject file_reject = 42;
+    FileCiphertext file_manifest = 43;
+    FileCiphertext file_chunk = 44;
+    FileCiphertext file_ack = 45;
+    FileCiphertext file_window_update = 46;
+    FileCiphertext file_resume = 47;
+    FileCiphertext file_complete = 48;
+    FileCiphertext file_verified = 49;
+    FileCiphertext file_cancel = 50;
+    FileError file_error = 51;
+  }
+}

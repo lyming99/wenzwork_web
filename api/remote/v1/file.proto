@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package remote.v1;
+
+option go_package = "github.com/wenzwork/wenzwork-web/server/internal/generated/remote/v1;remotev1";
+
+import "remote/v1/common.proto";
+
+enum FileCipherSuite {
+  FILE_CIPHER_SUITE_UNSPECIFIED = 0;
+  FILE_CIPHER_SUITE_XCHACHA20_POLY1305 = 1;
+  FILE_CIPHER_SUITE_AES_256_GCM = 2;
+}
+
+message FileOpen {
+  string file_ticket = 1;
+  string transfer_id = 2;
+  uint64 generation = 3;
+  bytes ephemeral_public_key = 4;
+  bytes identity_signature = 5;
+  uint64 declared_total_bytes = 6;
+  uint32 declared_file_count = 7;
+}
+
+message FileAccept {
+  string transfer_id = 1;
+  uint64 generation = 2;
+  bytes ephemeral_public_key = 3;
+  bytes identity_signature = 4;
+  FileCipherSuite cipher_suite = 5;
+  uint32 chunk_size_bytes = 6;
+  uint32 receive_window_bytes = 7;
+}
+
+message FileReject {
+  string transfer_id = 1;
+  ErrorCode code = 2;
+  bool retryable = 3;
+}
+
+// FileCiphertext deliberately exposes only routing, ordering and ciphertext
+// size. Manifest hashes, file IDs, paths, offsets, ACK ranges and final
+// verification results live inside the authenticated encrypted payload.
+message FileCiphertext {
+  string transfer_id = 1;
+  uint64 generation = 2;
+  uint64 message_sequence = 3;
+  bytes ciphertext = 4;
+}
+
+message FileError {
+  string transfer_id = 1;
+  uint64 generation = 2;
+  ErrorCode code = 3;
+  bool retryable = 4;
+  bytes encrypted_detail = 5;
+}

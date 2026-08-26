@@ -1,0 +1,40 @@
+[Unit]
+Description=WenzWork Device Agent
+Documentation=https://wenzwork.com/docs/device-agent
+Wants=network-online.target time-sync.target
+After=network-online.target time-sync.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=wenzwork-agent
+Group=wenzwork-agent
+Environment=HOME=/var/lib/wenzwork-device-agent
+ExecStart=__INSTALL_ROOT__/current/bin/wenzwork-device-agent serve --env-file __ENV_FILE__
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=60s
+TimeoutStopSec=45s
+KillMode=control-group
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+LimitNOFILE=65536
+TasksMax=512
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

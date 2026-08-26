@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package remote.v1;
+
+option go_package = "github.com/wenzwork/wenzwork-web/server/internal/generated/remote/v1;remotev1";
+
+import "google/protobuf/timestamp.proto";
+
+message ProjectSyncCommand {
+  string project_id = 1;
+  uint64 after_sequence = 2;
+  uint64 known_high_watermark = 3;
+}
+
+message TaskCreateCommand {
+  string task_id = 1;
+  string project_id = 2;
+  string title = 3;
+  bytes typed_input = 4;
+  uint64 expected_revision = 5;
+  string task_type = 6;
+}
+
+message TaskCancelCommand {
+  string task_id = 1;
+}
+
+message Command {
+  string command_id = 1;
+  google.protobuf.Timestamp issued_at = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  string actor_user_id = 4;
+  uint64 grant_version = 5;
+  string signing_key_id = 6;
+  bytes signature = 7;
+  string idempotency_key = 8;
+
+  oneof body {
+    ProjectSyncCommand project_sync = 20;
+    TaskCreateCommand task_create = 21;
+    TaskCancelCommand task_cancel = 22;
+  }
+}
+
+message CommandReceived {
+  string command_id = 1;
+}
+
+message CommandAccepted {
+  string command_id = 1;
+  google.protobuf.Timestamp persisted_at = 2;
+}
+
+enum DeviceEventKind {
+  DEVICE_EVENT_KIND_UNSPECIFIED = 0;
+  DEVICE_EVENT_KIND_PROJECT_DISCOVERED = 1;
+  DEVICE_EVENT_KIND_PROJECT_UPDATED = 2;
+  DEVICE_EVENT_KIND_PROJECT_REMOVED = 3;
+  DEVICE_EVENT_KIND_TASK_ACCEPTED = 4;
+  DEVICE_EVENT_KIND_TASK_RUNNING = 5;
+  DEVICE_EVENT_KIND_TASK_SUCCEEDED = 6;
+  DEVICE_EVENT_KIND_TASK_FAILED = 7;
+  DEVICE_EVENT_KIND_TASK_REJECTED = 8;
+  DEVICE_EVENT_KIND_TASK_CANCELLED = 9;
+  DEVICE_EVENT_KIND_CAPABILITIES_UPDATED = 10;
+}
+
+message DeviceEvent {
+  string event_id = 1;
+  string command_id = 2;
+  DeviceEventKind kind = 3;
+  uint64 device_sequence = 4;
+  google.protobuf.Timestamp occurred_at = 5;
+  bytes typed_payload = 6;
+}
+
+message EventTransportAck {
+  string event_id = 1;
+}

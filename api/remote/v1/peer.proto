@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package remote.v1;
+
+option go_package = "github.com/wenzwork/wenzwork-web/server/internal/generated/remote/v1;remotev1";
+
+import "google/protobuf/timestamp.proto";
+import "remote/v1/common.proto";
+
+message PeerOpen {
+  string session_ticket = 1;
+  string session_id = 2;
+  bytes ephemeral_public_key = 3;
+  bytes identity_signature = 4;
+}
+
+message PeerReady {
+  string session_id = 1;
+  bytes ephemeral_public_key = 2;
+  bytes identity_signature = 3;
+}
+
+// PeerCiphertext contains no prompt, response or tool result in clear text.
+message PeerCiphertext {
+  string session_id = 1;
+  string query_id = 2;
+  uint64 generation = 3;
+  uint64 message_sequence = 4;
+  google.protobuf.Timestamp deadline = 5;
+  bytes ciphertext = 6;
+}
+
+message PeerError {
+  string session_id = 1;
+  string query_id = 2;
+  ErrorCode code = 3;
+  bool retryable = 4;
+}

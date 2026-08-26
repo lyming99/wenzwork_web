@@ -1,0 +1,102 @@
+groups:
+  - name: wenzwork-relay
+    interval: 30s
+    rules:
+      - alert: RelayNodeNotRegistered
+        expr: wenzwork_relay_registered == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Relay 节点未向 Host 注册
+          runbook_url: deploy/runbooks/relay-observability.md#relaynode-not-registered
+
+      - alert: RelayNodeHeartbeatStale
+        expr: wenzwork_relay_registered == 1 and (time() - wenzwork_relay_last_heartbeat_seconds) > 45
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Relay 节点心跳超过 Lease 窗口
+          runbook_url: deploy/runbooks/relay-observability.md#relaynode-heartbeat-stale
+
+      - alert: RelayNodeRoutingNotReady
+        expr: wenzwork_relay_registered == 1 and wenzwork_relay_routing_ready == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Relay 已注册但数据面未就绪
+          runbook_url: deploy/runbooks/relay-observability.md#relay-routing-not-ready
+
+      - alert: RelayRouteNegotiationRejected
+        expr: sum(rate(wenzwork_relay_route_rejected_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Host 持续拒绝 Relay 上报的常驻 Route
+          runbook_url: deploy/runbooks/relay-observability.md#relay-route-negotiation-rejected
+
+      - alert: RelayQueuePressure
+        expr: max(wenzwork_relay_queue_bytes) > 3145728 or sum(rate(wenzwork_relay_queue_rejected_total[5m])) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Relay 下行队列接近上限或已拒绝消息
+          runbook_url: deploy/runbooks/relay-observability.md#relay-queue-pressure
+
+      - alert: RelayV2GlobalQueuePressure
+        expr: (wenzwork_relay_v2_queue_bytes / wenzwork_relay_v2_queue_budget_bytes) > 0.8 or sum(rate(wenzwork_relay_v2_queue_rejected_total[5m])) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Relay v2 全局队列预算接近上限或已拒绝消息
+          runbook_url: deploy/runbooks/relay-observability.md#relay-v2-global-queue-pressure
+
+      - alert: RelayV2LinkRoutePressure
+        expr: wenzwork_relay_v2_link_routes > 50000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Relay v2 Link 路由接近硬上限
+          runbook_url: deploy/runbooks/relay-observability.md#relay-v2-link-route-pressure
+
+      - alert: RelayWriteLoopLag
+        expr: max(wenzwork_relay_write_loop_lag_seconds) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Relay 写循环持续阻塞
+          runbook_url: deploy/runbooks/relay-observability.md#relay-write-loop-lag
+
+      - alert: RelayHandshakeFailureBurst
+        expr: sum(rate(wenzwork_relay_handshakes_failed_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Relay 握手失败率持续升高
+          runbook_url: deploy/runbooks/relay-observability.md#relay-handshake-failure-burst
+
+      - alert: RelayRateLimitSustained
+        expr: sum(rate(wenzwork_relay_rate_limited_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Relay 持续触发接入限流
+          runbook_url: deploy/runbooks/relay-observability.md#relay-rate-limit-sustained
+
+      - alert: RelayDrainStalled
+        expr: wenzwork_relay_draining == 1 and (wenzwork_relay_connections > 0 or wenzwork_relay_v2_carriers > 0)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Relay Drain 后仍长期保留连接
+          runbook_url: deploy/runbooks/relay-observability.md#relay-drain-stalled

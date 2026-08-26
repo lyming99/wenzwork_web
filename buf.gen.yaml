@@ -1,0 +1,16 @@
+version: v2
+inputs:
+  - directory: api
+plugins:
+  - remote: buf.build/protocolbuffers/go:v1.36.11
+    out: server/internal/generated
+    opt:
+      - paths=source_relative
+  - remote: buf.build/grpc/go:v1.6.2
+    out: server/internal/generated
+    opt:
+      - paths=source_relative
+  - remote: buf.build/bufbuild/es:v2.10.2
+    out: web/src/generated
+    opt:
+      - target=ts

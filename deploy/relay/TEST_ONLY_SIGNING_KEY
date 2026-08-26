@@ -1,0 +1,3 @@
+The adjacent release-signing-public-key.pem is a public test key for local and
+CI verification only. Production server packages replace it with the public
+half of the protected Release signing key and intentionally omit this marker.

@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Deterministic public cryptographic inputs for the file protocol interoperability vector"
+  paths = ['''^server[/\\]internal[/\\]fileprotocol[/\\]testdata[/\\]file_v1_vector\.json$''']

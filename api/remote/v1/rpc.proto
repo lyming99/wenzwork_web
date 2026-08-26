@@ -1,0 +1,488 @@
+syntax = "proto3";
+
+package remote.v1;
+
+option go_package = "github.com/wenzwork/wenzwork-web/server/internal/generated/remote/v1;remotev1";
+
+import "google/protobuf/timestamp.proto";
+
+// RpcEnvelope is serialized and then placed in PeerCiphertext.ciphertext. Relay
+// and the cloud API must never decode, log or persist this inner message.
+message RpcEnvelope {
+  uint32 protocol_version = 1;
+  oneof message {
+    RpcRequest request = 10;
+    RpcResponse response = 11;
+    RpcEvent event = 12;
+  }
+}
+
+message RpcRequestHeader {
+  string request_id = 1;
+  string idempotency_key = 2;
+  optional uint64 expected_revision = 3;
+  google.protobuf.Timestamp deadline = 4;
+  // Every project-scoped v2 method carries the stable device-local project
+  // identifier here. The path itself is never sent outside the Agent.
+  // Device-scoped methods deliberately leave this empty.
+  string project_id = 5;
+}
+
+message PageRequest {
+  string cursor = 1;
+  uint32 limit = 2;
+  uint64 high_watermark = 3;
+}
+
+message Tombstone {
+  string resource_id = 1;
+  uint64 revision = 2;
+  google.protobuf.Timestamp removed_at = 3;
+}
+
+message SyncPage {
+  string next_cursor = 1;
+  uint64 high_watermark = 2;
+  bool reset_required = 3;
+  repeated Tombstone tombstones = 4;
+}
+
+message RpcRequest {
+  RpcRequestHeader header = 1;
+  // Generic method/payload provides forward-compatible RPC dispatch while the
+  // typed oneof below remains available for stable high-volume methods.
+  string method = 10;
+  bytes json_payload = 11;
+  oneof body {
+    AIConfigListRequest ai_config_list = 20;
+    AIConfigPutRequest ai_config_put = 21;
+    AIConfigDeleteRequest ai_config_delete = 22;
+    ConversationListRequest conversation_list = 30;
+    ConversationGetRequest conversation_get = 31;
+    ConversationCreateRequest conversation_create = 32;
+    ConversationDeleteRequest conversation_delete = 33;
+    ChatSendRequest chat_send = 34;
+    ChatCancelRequest chat_cancel = 35;
+    FileListRequest file_list = 40;
+    FileStatRequest file_stat = 41;
+    FileTransferPrepareRequest file_transfer_prepare = 42;
+  }
+}
+
+message RpcResponseHeader {
+  string request_id = 1;
+  uint64 revision = 2;
+  bool replayed = 3;
+}
+
+enum RpcErrorCode {
+  RPC_ERROR_CODE_UNSPECIFIED = 0;
+  RPC_ERROR_CODE_INVALID_ARGUMENT = 1;
+  RPC_ERROR_CODE_NOT_FOUND = 2;
+  RPC_ERROR_CODE_FORBIDDEN = 3;
+  RPC_ERROR_CODE_REVISION_CONFLICT = 4;
+  RPC_ERROR_CODE_IDEMPOTENCY_CONFLICT = 5;
+  RPC_ERROR_CODE_BUSY = 6;
+  RPC_ERROR_CODE_CANCELLED = 7;
+  RPC_ERROR_CODE_INTERNAL = 8;
+  // The project in the encrypted request did not match the project bound into
+  // the short-lived Peer ticket, or is no longer registered on the device.
+  RPC_ERROR_CODE_PROJECT_MISMATCH = 9;
+  // A feature is known by the protocol but disabled by device policy or not
+  // available on the current Agent/runtime.
+  RPC_ERROR_CODE_CAPABILITY_UNAVAILABLE = 10;
+  // The request's authenticated Peer/RPC deadline elapsed before a terminal
+  // result was available. This is distinct from an explicit user cancellation.
+  RPC_ERROR_CODE_DEADLINE_EXCEEDED = 11;
+  // A scoped queue, stream window or worker budget was exhausted. Clients may
+  // retry/reopen only the affected query or logical session as indicated by
+  // retryable metadata; the physical Relay carrier remains healthy.
+  RPC_ERROR_CODE_RESOURCE_EXHAUSTED = 12;
+}
+
+message RpcError {
+  RpcErrorCode code = 1;
+  string safe_message = 2;
+  bool retryable = 3;
+  uint32 retry_after_seconds = 4;
+}
+
+message RpcResponse {
+  RpcResponseHeader header = 1;
+  RpcError error = 2;
+  bytes json_payload = 10;
+  oneof body {
+    AIConfigListResponse ai_config_list = 20;
+    AIConfigPutResponse ai_config_put = 21;
+    ConversationListResponse conversation_list = 30;
+    ConversationGetResponse conversation_get = 31;
+    ConversationMutationResponse conversation_mutation = 32;
+    ChatAcceptedResponse chat_accepted = 33;
+    FileListResponse file_list = 40;
+    FileStatResponse file_stat = 41;
+    FileTransferPrepareResponse file_transfer_prepare = 42;
+  }
+}
+
+message AIConfigSummary {
+  string config_id = 1;
+  string display_name = 2;
+  string provider = 3;
+  string model = 4;
+  bool enabled = 5;
+  bool credential_present = 6;
+  uint64 revision = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  string base_url = 9;
+  map<string, string> non_secret_headers = 10;
+  string system_prompt = 11;
+  double temperature = 12;
+  string reasoning_effort = 13;
+  uint32 max_turn_output_tokens = 14;
+  uint32 max_active_context_tokens = 15;
+  uint32 max_agent_rounds = 16;
+  uint32 max_agent_tool_calls = 17;
+  uint32 max_agent_no_progress_rounds = 18;
+  uint32 request_timeout_seconds = 19;
+  uint32 max_retries = 20;
+  uint32 retry_base_delay_milliseconds = 21;
+  bool show_usage = 22;
+}
+
+enum AISecretAction {
+  AI_SECRET_ACTION_UNSPECIFIED = 0;
+  AI_SECRET_ACTION_KEEP = 1;
+  AI_SECRET_ACTION_REPLACE = 2;
+  AI_SECRET_ACTION_CLEAR = 3;
+}
+
+message AIConfigListRequest { PageRequest page = 1; }
+
+message AIConfigListResponse {
+  repeated AIConfigSummary items = 1;
+  SyncPage sync = 2;
+}
+
+message AIConfigPutRequest {
+  string config_id = 1;
+  string display_name = 2;
+  string provider = 3;
+  string model = 4;
+  bool enabled = 5;
+  // Secret exists only in this end-to-end encrypted inner message. It must be
+  // zeroed after use and must never be copied into a cloud command/event.
+  bytes credential_secret = 6;
+  bool clear_credential = 7;
+  string base_url = 8;
+  map<string, string> non_secret_headers = 9;
+  string system_prompt = 10;
+  double temperature = 11;
+  string reasoning_effort = 12;
+  uint32 max_turn_output_tokens = 13;
+  uint32 max_active_context_tokens = 14;
+  uint32 max_agent_rounds = 15;
+  uint32 max_agent_tool_calls = 16;
+  uint32 max_agent_no_progress_rounds = 17;
+  uint32 request_timeout_seconds = 18;
+  uint32 max_retries = 19;
+  uint32 retry_base_delay_milliseconds = 20;
+  bool show_usage = 21;
+  AISecretAction secret_action = 22;
+}
+
+message AIConfigPutResponse { AIConfigSummary config = 1; }
+message AIConfigDeleteRequest { string config_id = 1; }
+
+message ConversationSummary {
+  string conversation_id = 1;
+  string title = 2;
+  string config_id = 3;
+  uint64 revision = 4;
+  uint64 last_message_sequence = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  string project_id = 8;
+  AIWorkspaceMode workspace_mode = 9;
+  AIModelBinding model_binding = 10;
+}
+
+enum AIWorkspaceMode {
+  AI_WORKSPACE_MODE_UNSPECIFIED = 0;
+  AI_WORKSPACE_MODE_READ_ONLY = 1;
+  AI_WORKSPACE_MODE_WORKSPACE_WRITE = 2;
+  AI_WORKSPACE_MODE_FULL_ACCESS = 3;
+}
+
+message AIModelBinding {
+  string config_id = 1;
+  uint64 config_revision = 2;
+  string provider = 3;
+  string model = 4;
+}
+
+message ConversationListRequest { PageRequest page = 1; }
+
+message ConversationListResponse {
+  repeated ConversationSummary items = 1;
+  SyncPage sync = 2;
+}
+
+message ConversationGetRequest {
+  string conversation_id = 1;
+  PageRequest messages = 2;
+}
+
+enum ChatRole {
+  CHAT_ROLE_UNSPECIFIED = 0;
+  CHAT_ROLE_SYSTEM = 1;
+  CHAT_ROLE_USER = 2;
+  CHAT_ROLE_ASSISTANT = 3;
+  CHAT_ROLE_TOOL = 4;
+}
+
+message ChatMessage {
+  string message_id = 1;
+  uint64 sequence = 2;
+  ChatRole role = 3;
+  // Content is protected by the outer PeerCiphertext and remains device-only.
+  string content = 4;
+  string status = 5;
+  google.protobuf.Timestamp created_at = 6;
+  uint64 revision = 7;
+  string error_code = 8;
+  repeated ChatAttachmentReference attachments = 9;
+  string reasoning = 10;
+  repeated ChatToolRun tool_runs = 11;
+  ChatUsage usage = 12;
+  ChatProviderRun provider_run = 13;
+}
+
+message ChatAttachmentReference {
+  string attachment_id = 1;
+  string relative_path = 2;
+  string name = 3;
+  string mime_type = 4;
+  uint64 size = 5;
+  bytes sha256 = 6;
+  uint64 revision = 7;
+}
+
+message ChatToolRun {
+  string run_id = 1;
+  string tool = 2;
+  string status = 3;
+  bytes arguments_json = 4;
+  bytes result_json = 5;
+  string error_code = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp finished_at = 8;
+}
+
+message ChatUsage {
+  uint64 input_tokens = 1;
+  uint64 output_tokens = 2;
+  uint64 reasoning_tokens = 3;
+  uint64 cached_input_tokens = 4;
+  uint64 total_tokens = 5;
+}
+
+message ChatProviderRun {
+  string provider = 1;
+  string model = 2;
+  string provider_request_id = 3;
+  string finish_reason = 4;
+  uint32 attempt_count = 5;
+}
+
+message ConversationGetResponse {
+  ConversationSummary conversation = 1;
+  repeated ChatMessage messages = 2;
+  SyncPage sync = 3;
+}
+
+message ConversationCreateRequest {
+  string conversation_id = 1;
+  string title = 2;
+  string config_id = 3;
+  AIWorkspaceMode workspace_mode = 4;
+}
+
+message ConversationDeleteRequest { string conversation_id = 1; }
+
+message ConversationRenameRequest {
+  string conversation_id = 1;
+  string title = 2;
+}
+
+message ConversationSearchRequest {
+  string query = 1;
+  PageRequest page = 2;
+}
+
+message ConversationMessagesBeforeRequest {
+  string conversation_id = 1;
+  uint64 before_sequence = 2;
+  uint32 limit = 3;
+}
+
+message ConversationMutationResponse {
+  ConversationSummary conversation = 1;
+  bool deleted = 2;
+}
+
+message ChatSendRequest {
+  string conversation_id = 1;
+  string message_id = 2;
+  string prompt = 3;
+  repeated ChatAttachmentReference attachments = 4;
+  AIWorkspaceMode workspace_mode = 5;
+}
+
+message ChatCancelRequest {
+  string conversation_id = 1;
+  string generation_id = 2;
+}
+
+message ChatRegenerateRequest {
+  string conversation_id = 1;
+  string message_id = 2;
+  AIWorkspaceMode workspace_mode = 3;
+}
+
+message ChatEventReplayRequest {
+  string conversation_id = 1;
+  uint64 after_sequence = 2;
+  uint32 limit = 3;
+}
+
+enum ChatApprovalDecision {
+  CHAT_APPROVAL_DECISION_UNSPECIFIED = 0;
+  CHAT_APPROVAL_DECISION_DENY = 1;
+  CHAT_APPROVAL_DECISION_ALLOW_ONCE = 2;
+  CHAT_APPROVAL_DECISION_ALLOW_FOR_SESSION = 3;
+}
+
+message ChatApprovalResponseRequest {
+  string conversation_id = 1;
+  string generation_id = 2;
+  string approval_request_id = 3;
+  ChatApprovalDecision decision = 4;
+}
+
+message ChatAcceptedResponse {
+  string conversation_id = 1;
+  string generation_id = 2;
+  uint64 accepted_revision = 3;
+}
+
+message FileListRequest {
+  // Paths are allowed only here, inside the encrypted RPC message.
+  string directory_path = 1;
+  PageRequest page = 2;
+}
+
+message FileEntry {
+  string name = 1;
+  string relative_path = 2;
+  bool directory = 3;
+  uint64 size = 4;
+  google.protobuf.Timestamp modified_at = 5;
+  uint64 revision = 6;
+}
+
+message FileListResponse {
+  repeated FileEntry items = 1;
+  SyncPage sync = 2;
+}
+
+message FileStatRequest { string relative_path = 1; }
+message FileStatResponse { FileEntry entry = 1; }
+
+enum FileTransferDirection {
+  FILE_TRANSFER_DIRECTION_UNSPECIFIED = 0;
+  FILE_TRANSFER_DIRECTION_UPLOAD_TO_DEVICE = 1;
+  FILE_TRANSFER_DIRECTION_DOWNLOAD_FROM_DEVICE = 2;
+}
+
+message FileTransferPrepareRequest {
+  string transfer_id = 1;
+  FileTransferDirection direction = 2;
+  string relative_path = 3;
+  uint64 size = 4;
+  bytes sha256 = 5;
+  uint64 resume_offset = 6;
+}
+
+message FileTransferPrepareResponse {
+  string transfer_id = 1;
+  uint32 chunk_size = 2;
+  uint32 window_chunks = 3;
+  uint64 accepted_offset = 4;
+}
+
+enum RpcEventKind {
+  RPC_EVENT_KIND_UNSPECIFIED = 0;
+  RPC_EVENT_KIND_CHAT_DELTA = 1;
+  RPC_EVENT_KIND_CHAT_COMPLETED = 2;
+  RPC_EVENT_KIND_CHAT_FAILED = 3;
+  RPC_EVENT_KIND_RESOURCE_CHANGED = 4;
+  RPC_EVENT_KIND_RESOURCE_TOMBSTONE = 5;
+  RPC_EVENT_KIND_TERMINAL_OUTPUT = 6;
+  RPC_EVENT_KIND_TERMINAL_EXIT = 7;
+  RPC_EVENT_KIND_CHAT_REASONING_DELTA = 8;
+  RPC_EVENT_KIND_CHAT_TOOL_STATUS = 9;
+  RPC_EVENT_KIND_CHAT_APPROVAL_REQUESTED = 10;
+  RPC_EVENT_KIND_CHAT_USAGE = 11;
+  RPC_EVENT_KIND_CHAT_CANCELLED = 12;
+  // A request-bound control frame for the long-lived event.subscribe RPC.
+  // Keep these numeric values append-only: clients use the existing RpcEvent
+  // envelope instead of introducing a Relay-visible event frame.
+  RPC_EVENT_KIND_EVENT_SUBSCRIPTION_CONTROL = 13;
+  RPC_EVENT_KIND_AGENT_STATE_CHANGED = 14;
+  RPC_EVENT_KIND_CHAT_GOAL_CHANGED = 15;
+  RPC_EVENT_KIND_CHAT_PLAN_MODE_CHANGED = 16;
+  RPC_EVENT_KIND_CHAT_TODO_UPDATED = 17;
+  RPC_EVENT_KIND_CHAT_SUBAGENT_STARTED = 18;
+  RPC_EVENT_KIND_CHAT_SUBAGENT_STATUS = 19;
+  RPC_EVENT_KIND_CHAT_SUBAGENT_MESSAGE = 20;
+}
+
+message ChatDelta {
+  string generation_id = 1;
+  string message_id = 2;
+  string delta = 3;
+}
+
+message ChatToolStatus {
+  string generation_id = 1;
+  ChatToolRun tool_run = 2;
+}
+
+message ChatApprovalRequest {
+  string generation_id = 1;
+  string request_id = 2;
+  string tool = 3;
+  string preview = 4;
+  string scope_kind = 5;
+  string scope_value = 6;
+  bool allow_session_approval = 7;
+  google.protobuf.Timestamp expires_at = 8;
+}
+
+message RpcEvent {
+  string event_id = 1;
+  RpcEventKind kind = 2;
+  string request_id = 3;
+  uint64 sequence = 4;
+  uint64 high_watermark = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+  bytes json_payload = 10;
+  oneof payload {
+    ChatMessage chat_message = 20;
+    Tombstone tombstone = 21;
+    ChatDelta chat_delta = 22;
+    ChatToolStatus chat_tool_status = 23;
+    ChatApprovalRequest chat_approval_request = 24;
+    ChatUsage chat_usage = 25;
+  }
+}

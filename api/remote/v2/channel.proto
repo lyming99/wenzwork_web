@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package remote.v2;
+
+option go_package = "github.com/wenzwork/wenzwork-web/server/internal/generated/remote/v2;remotev2";
+
+import "remote/v2/common.proto";
+
+// These messages are serialized inside EncryptedRecord.ciphertext.
+message ChannelOpen {
+  string channel_id = 401;
+  ChannelKind kind = 402;
+  string project_id = 403;
+  repeated string scopes = 404;
+  bytes capability_revision = 405;
+}
+
+message ChannelAccept {
+  string channel_id = 411;
+  repeated string granted_scopes = 412;
+  bytes capability_revision = 413;
+}
+
+message ChannelClose {
+  string channel_id = 421;
+  ProtocolErrorCode reason = 422;
+}
+
+message StreamOpen {
+  string channel_id = 431;
+  string stream_id = 432;
+  StreamKind kind = 433;
+  string operation_id = 434;
+}
+
+message StreamAck {
+  string channel_id = 441;
+  string stream_id = 442;
+  uint64 acknowledged_sequence = 443;
+}
+
+message StreamClose {
+  string channel_id = 451;
+  string stream_id = 452;
+  ProtocolErrorCode reason = 453;
+}

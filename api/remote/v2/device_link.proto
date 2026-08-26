@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package remote.v2;
+
+option go_package = "github.com/wenzwork/wenzwork-web/server/internal/generated/remote/v2;remotev2";
+
+import "google/protobuf/timestamp.proto";
+import "remote/v2/common.proto";
+
+// LinkInit is signed by the Client Ed25519 identity before X25519 is used.
+message LinkInit {
+  string grant_id = 201;
+  string link_id = 202;
+  string client_id = 203;
+  string device_id = 204;
+  string relay_node_id = 205;
+  string relay_cell_id = 206;
+  uint64 target_connection_epoch = 207;
+  uint64 client_identity_key_version = 208;
+  bytes client_ephemeral_public_key = 209;
+  bytes client_challenge = 210;
+  google.protobuf.Timestamp expires_at = 211;
+  bytes identity_signature = 212;
+  // The Device verifies this reusable, PoP-bound signed Grant itself before it
+  // accepts the Client identity signature. Neither Relay nor Device persists
+  // the credential text.
+  string device_connection_grant = 213;
+}
+
+// LinkAccept is signed by the Device Ed25519 identity over the full handshake
+// transcript including LinkInit.
+message LinkAccept {
+  string grant_id = 221;
+  string link_id = 222;
+  string client_id = 223;
+  string device_id = 224;
+  string relay_node_id = 225;
+  string relay_cell_id = 226;
+  uint64 target_connection_epoch = 227;
+  uint64 device_identity_key_version = 228;
+  bytes client_ephemeral_public_key = 229;
+  bytes device_ephemeral_public_key = 230;
+  bytes client_challenge = 231;
+  bytes device_challenge = 232;
+  google.protobuf.Timestamp expires_at = 233;
+  bytes identity_signature = 234;
+}
+
+message LinkConfirm {
+  string link_id = 241;
+  bytes transcript_mac = 242;
+}
+
+message LinkReady {
+  string link_id = 251;
+  uint64 active_key_id = 252;
+  // A zero value means that this Device uses the pre-lease remote/v2
+  // lifecycle. New Clients enable the renewable lease only when both values
+  // are present, preserving rolling-upgrade compatibility.
+  uint32 lease_renewal_interval_seconds = 253;
+  uint32 lease_duration_seconds = 254;
+}
+
+// LinkLeaseRenew and LinkLeaseRenewed travel only inside the encrypted Link
+// control Stream. Relay forwards their ciphertext and Host is not involved.
+message LinkLeaseRenew {
+  string link_id = 255;
+  uint64 renewal_sequence = 256;
+}
+
+message LinkLeaseRenewed {
+  string link_id = 257;
+  uint64 renewal_sequence = 258;
+  uint32 lease_renewal_interval_seconds = 259;
+  uint32 lease_duration_seconds = 260;
+}
+
+message StreamKeyBoundary {
+  string stream_id = 261;
+  uint64 next_sequence = 262;
+}
+
+message RekeyInit {
+  string link_id = 271;
+  string rekey_id = 272;
+  uint64 next_key_id = 273;
+  bytes ephemeral_public_key = 274;
+  bytes identity_signature = 275;
+}
+
+message RekeyAck {
+  string link_id = 281;
+  string rekey_id = 282;
+  uint64 next_key_id = 283;
+  bytes ephemeral_public_key = 284;
+  bytes identity_signature = 285;
+}
+
+message RekeyCommit {
+  string link_id = 291;
+  string rekey_id = 292;
+  uint64 next_key_id = 293;
+  repeated StreamKeyBoundary boundaries = 294;
+}
+
+// LinkEnvelope exposes only routing identifiers and encrypted bytes to Relay.
+// It contains no project ID, scope, path, prompt or RPC body.
+message LinkEnvelope {
+  string link_id = 301;
+  oneof body {
+    LinkInit link_init = 310;
+    LinkAccept link_accept = 311;
+    EncryptedRecord encrypted = 312;
+  }
+}

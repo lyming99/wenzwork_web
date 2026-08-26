@@ -1,0 +1,31 @@
+[Unit]
+Description=WenzWork Relay Directory
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wenzwork-control
+Group=wenzwork-control
+EnvironmentFile=/etc/wenzwork/relay-control.env
+ExecStart=/opt/wenzwork-control/bin/wenzwork-relay-directory
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+UMask=0027
+ReadWritePaths=/var/lib/wenzwork-control
+
+[Install]
+WantedBy=multi-user.target

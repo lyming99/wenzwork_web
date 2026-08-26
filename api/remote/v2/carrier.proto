@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package remote.v2;
+
+option go_package = "github.com/wenzwork/wenzwork-web/server/internal/generated/remote/v2;remotev2";
+
+import "remote/v2/channel.proto";
+import "remote/v2/common.proto";
+import "remote/v2/device_link.proto";
+
+message CarrierHello {
+  string grant = 701;
+  string grant_id = 702;
+  string client_id = 703;
+  uint64 client_identity_key_version = 704;
+  bytes client_challenge = 705;
+  bytes client_proof = 706;
+  // Device Agent authenticates its own v2 Carrier with a short-lived device
+  // connection ticket. Client carriers leave these fields empty.
+  string device_connection_ticket = 707;
+  string device_id = 708;
+  uint64 device_connection_epoch = 709;
+  bytes device_proof = 710;
+}
+
+message CarrierReady {
+  string carrier_id = 711;
+  uint64 carrier_epoch = 712;
+  uint32 heartbeat_interval_seconds = 713;
+  uint32 control_queue_byte_limit = 714;
+  uint32 interactive_queue_byte_limit = 715;
+  uint32 bulk_queue_byte_limit = 716;
+}
+
+message CarrierPing {
+  uint64 monotonic_millis = 721;
+}
+
+message CarrierPong {
+  uint64 monotonic_millis = 731;
+}
+
+message CarrierGoAway {
+  ProtocolErrorCode reason = 741;
+  uint32 reconnect_after_millis = 742;
+}
+
+message CarrierResume {
+  string link_id = 751;
+  repeated StreamAck last_ack_by_stream = 752;
+}
+
+// CarrierStreamRejected is transport-only feedback. It lets a saturated bulk
+// queue reject one Stream without closing a healthy Link or Carrier.
+message CarrierStreamRejected {
+  string link_id = 761;
+  string channel_id = 762;
+  string stream_id = 763;
+  ProtocolErrorCode reason = 764;
+}
+
+// CarrierEnvelope contains only transport metadata. project_id and all
+// business fields are always inside LinkEnvelope.encrypted.
+message CarrierEnvelope {
+  uint32 protocol_major = 801;
+  string carrier_id = 802;
+  uint64 carrier_epoch = 803;
+  uint64 packet_sequence = 804;
+  uint64 acknowledged_sequence = 805;
+  oneof body {
+    CarrierHello hello = 810;
+    CarrierReady ready = 811;
+    LinkEnvelope link = 812;
+    CarrierPing ping = 813;
+    CarrierPong pong = 814;
+    CarrierGoAway go_away = 815;
+    CarrierResume resume = 816;
+    CarrierStreamRejected stream_rejected = 817;
+  }
+}
