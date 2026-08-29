@@ -24,14 +24,17 @@ type Store struct {
 type StoreOption func(*Store) error
 
 type PricingPlan struct {
-	Code               string   `json:"code"`
-	Name               string   `json:"name"`
-	Description        string   `json:"description"`
-	PriceMinor         *int64   `json:"priceMinor"`
-	OriginalPriceMinor *int64   `json:"originalPriceMinor"`
-	Currency           string   `json:"currency"`
-	BillingPeriod      string   `json:"billingPeriod"`
-	Features           []string `json:"features"`
+	Code                  string   `json:"code"`
+	Name                  string   `json:"name"`
+	Description           string   `json:"description"`
+	PriceMinor            *int64   `json:"priceMinor"`
+	OriginalPriceMinor    *int64   `json:"originalPriceMinor"`
+	Currency              string   `json:"currency"`
+	BillingPeriod         string   `json:"billingPeriod"`
+	Features              []string `json:"features"`
+	RemoteAccessEnabled   bool     `json:"remoteAccessEnabled"`
+	DeviceLimit           int      `json:"deviceLimit"`
+	MonthlyTrafficLimitGB *int64   `json:"monthlyTrafficLimitGb"`
 }
 
 type ReleaseFilter struct {
@@ -94,7 +97,8 @@ func (s *Store) ListPricingPlans(ctx context.Context) ([]PricingPlan, error) {
 	var rows []pricingPlanRow
 	if err := s.db.WithContext(ctx).Table("pricing_plans AS plan").
 		Select(`published.code, published.name, published.description, published.price_minor, published.original_price_minor,
-			published.currency, published.billing_period, published.features_json`).
+			published.currency, published.billing_period, published.features_json, published.remote_access_enabled,
+			published.device_limit, published.monthly_traffic_limit_gb`).
 		Joins(`JOIN pricing_plan_versions AS published
 			ON published.pricing_plan_id = plan.id AND published.version = plan.published_version`).
 		Where("plan.status = 'published'").
@@ -110,14 +114,17 @@ func (s *Store) ListPricingPlans(ctx context.Context) ([]PricingPlan, error) {
 			return nil, fmt.Errorf("decode pricing plan %s features: %w", row.Code, err)
 		}
 		plans = append(plans, PricingPlan{
-			Code:               row.Code,
-			Name:               row.Name,
-			Description:        row.Description,
-			PriceMinor:         row.PriceMinor,
-			OriginalPriceMinor: row.OriginalPriceMinor,
-			Currency:           row.Currency,
-			BillingPeriod:      row.BillingPeriod,
-			Features:           features,
+			Code:                  row.Code,
+			Name:                  row.Name,
+			Description:           row.Description,
+			PriceMinor:            row.PriceMinor,
+			OriginalPriceMinor:    row.OriginalPriceMinor,
+			Currency:              row.Currency,
+			BillingPeriod:         row.BillingPeriod,
+			Features:              features,
+			RemoteAccessEnabled:   row.RemoteAccessEnabled,
+			DeviceLimit:           row.DeviceLimit,
+			MonthlyTrafficLimitGB: row.MonthlyTrafficLimitGB,
 		})
 	}
 	return plans, nil
@@ -243,22 +250,25 @@ func (s *Store) listReleases(ctx context.Context, filter ReleaseFilter) ([]Relea
 }
 
 type pricingPlanRow struct {
-	ID                 uuid.UUID       `gorm:"column:id;type:uuid;primaryKey"`
-	Code               string          `gorm:"column:code"`
-	Name               string          `gorm:"column:name"`
-	Description        string          `gorm:"column:description"`
-	PriceMinor         *int64          `gorm:"column:price_minor"`
-	OriginalPriceMinor *int64          `gorm:"column:original_price_minor"`
-	Currency           string          `gorm:"column:currency"`
-	BillingPeriod      string          `gorm:"column:billing_period"`
-	FeaturesJSON       json.RawMessage `gorm:"column:features_json;type:jsonb"`
-	Status             string          `gorm:"column:status"`
-	SortOrder          int             `gorm:"column:sort_order"`
-	Version            int64           `gorm:"column:version"`
-	PublishedVersion   *int64          `gorm:"column:published_version"`
-	PublishedAt        *time.Time      `gorm:"column:published_at"`
-	CreatedAt          time.Time       `gorm:"column:created_at"`
-	UpdatedAt          time.Time       `gorm:"column:updated_at"`
+	ID                    uuid.UUID       `gorm:"column:id;type:uuid;primaryKey"`
+	Code                  string          `gorm:"column:code"`
+	Name                  string          `gorm:"column:name"`
+	Description           string          `gorm:"column:description"`
+	PriceMinor            *int64          `gorm:"column:price_minor"`
+	OriginalPriceMinor    *int64          `gorm:"column:original_price_minor"`
+	Currency              string          `gorm:"column:currency"`
+	BillingPeriod         string          `gorm:"column:billing_period"`
+	FeaturesJSON          json.RawMessage `gorm:"column:features_json;type:jsonb"`
+	RemoteAccessEnabled   bool            `gorm:"column:remote_access_enabled"`
+	DeviceLimit           int             `gorm:"column:device_limit"`
+	MonthlyTrafficLimitGB *int64          `gorm:"column:monthly_traffic_limit_gb"`
+	Status                string          `gorm:"column:status"`
+	SortOrder             int             `gorm:"column:sort_order"`
+	Version               int64           `gorm:"column:version"`
+	PublishedVersion      *int64          `gorm:"column:published_version"`
+	PublishedAt           *time.Time      `gorm:"column:published_at"`
+	CreatedAt             time.Time       `gorm:"column:created_at"`
+	UpdatedAt             time.Time       `gorm:"column:updated_at"`
 }
 
 func (pricingPlanRow) TableName() string { return "pricing_plans" }

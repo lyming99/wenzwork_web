@@ -6,7 +6,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net"
+	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +25,10 @@ const (
 	// tightly constrained deployments.
 	DefaultDeviceLinkGrantTTL time.Duration = 0
 	MaximumDeviceLinkGrantTTL               = 15 * time.Minute
+	// Direct listeners cannot consult the Relay fleet's shared revocation
+	// store. Bound their reusable PoP material so a revoked credential cannot
+	// open new direct Carriers indefinitely.
+	directDeviceLinkGrantTTL = 5 * time.Minute
 )
 
 type DeviceLinkGrantIssuerConfig struct {
@@ -67,6 +74,11 @@ func (issuer *BrowserDeviceLinkGrantIssuer) IssueDeviceLink(ctx context.Context,
 	if err != nil {
 		return DeviceLink{}, ErrInvalidInput
 	}
+	now := issuer.now().UTC()
+	target, err := issuer.resolveDeviceLinkTarget(ctx, input, now)
+	if err != nil {
+		return DeviceLink{}, err
+	}
 	grantTTL := issuer.grantTTL
 	if input.RequestedMaximumLifetimeSec != nil {
 		requested := time.Duration(*input.RequestedMaximumLifetimeSec) * time.Second
@@ -77,23 +89,8 @@ func (issuer *BrowserDeviceLinkGrantIssuer) IssueDeviceLink(ctx context.Context,
 			grantTTL = requested
 		}
 	}
-	now := issuer.now().UTC()
-	route, err := resolveDeviceLinkRoute(ctx, issuer.routes, input.TargetDeviceID.String(), now)
-	if err != nil {
-		return DeviceLink{}, err
-	}
-	relayNodeID, nodeErr := uuid.Parse(route.NodeID)
-	relayCellID, cellErr := uuid.Parse(route.CellID)
-	if nodeErr != nil || cellErr != nil || route.DeviceID != input.TargetDeviceID.String() || route.UserID != input.UserID.String() ||
-		route.GrantVersion != input.TargetGrantVersion || route.ConnectionEpoch == 0 {
-		return DeviceLink{}, ErrUnavailable
-	}
-	if route.ProtocolVersion != 2 {
-		return DeviceLink{}, ErrProtocolVersion
-	}
-	relayURL, err := loadRelayV2Endpoint(ctx, issuer.db, relayNodeID, relayCellID, now)
-	if err != nil {
-		return DeviceLink{}, err
+	if target.ConnectionMode == "direct" && (grantTTL == 0 || grantTTL > directDeviceLinkGrantTTL) {
+		grantTTL = directDeviceLinkGrantTTL
 	}
 	maximumLifetimeSeconds, expiresAt := deviceLinkGrantWindow(now, grantTTL)
 	claims := remoteauth.DeviceLinkGrantClaims{
@@ -101,9 +98,9 @@ func (issuer *BrowserDeviceLinkGrantIssuer) IssueDeviceLink(ctx context.Context,
 		GrantID:                  uuid.NewString(),
 		ClientID:                 input.ControllerID.String(),
 		DeviceID:                 input.TargetDeviceID.String(),
-		RelayNodeID:              relayNodeID.String(),
-		RelayCellID:              relayCellID.String(),
-		TargetConnectionEpoch:    route.ConnectionEpoch,
+		RelayNodeID:              target.NodeID.String(),
+		RelayCellID:              target.CellID.String(),
+		TargetConnectionEpoch:    target.ConnectionEpoch,
 		ClientIdentityKey:        base64.RawURLEncoding.EncodeToString(input.ControllerPublicKey),
 		ClientKeyThumbprint:      input.ControllerKeyThumbprint,
 		ClientIdentityKeyVersion: input.ControllerKeyVersion,
@@ -127,9 +124,81 @@ func (issuer *BrowserDeviceLinkGrantIssuer) IssueDeviceLink(ctx context.Context,
 	}
 	return DeviceLink{
 		GrantID: grantID, Grant: grant, ExpiresAt: time.Unix(claims.ExpiresAt, 0).UTC(), MaximumLifetimeSeconds: claims.MaximumLifetimeSeconds,
-		RelayURL: relayURL, RelayNodeID: relayNodeID, RelayCellID: relayCellID, TargetConnectionEpoch: route.ConnectionEpoch,
+		ConnectionMode: target.ConnectionMode, ConnectionURL: target.URL,
+		RelayURL: target.URL, RelayNodeID: target.NodeID, RelayCellID: target.CellID, TargetConnectionEpoch: target.ConnectionEpoch,
 		DeviceIdentityAlgorithm: "Ed25519", DeviceIdentityPublicKey: base64.RawURLEncoding.EncodeToString(input.TargetPublicKey),
 		DeviceKeyThumbprint: input.TargetKeyThumbprint, DeviceIdentityKeyVersion: input.TargetKeyVersion,
+	}, nil
+}
+
+type deviceLinkTarget struct {
+	ConnectionMode  string
+	URL             string
+	NodeID          uuid.UUID
+	CellID          uuid.UUID
+	ConnectionEpoch uint64
+}
+
+func (issuer *BrowserDeviceLinkGrantIssuer) resolveDeviceLinkTarget(ctx context.Context, input DeviceLinkIssueInput, now time.Time) (deviceLinkTarget, error) {
+	var direct struct {
+		ModeEnabled     bool       `gorm:"column:direct_mode_enabled"`
+		EndpointEnabled bool       `gorm:"column:direct_endpoint_enabled"`
+		TLSEnabled      bool       `gorm:"column:direct_tls_enabled"`
+		IP              string     `gorm:"column:direct_ip"`
+		Port            int64      `gorm:"column:direct_port"`
+		ConnectionEpoch int64      `gorm:"column:direct_connection_epoch"`
+		LastSeenAt      *time.Time `gorm:"column:direct_last_seen_at"`
+	}
+	if err := issuer.db.WithContext(ctx).Table("remote_device_credentials").
+		Select("direct_mode_enabled, direct_endpoint_enabled, direct_tls_enabled, direct_ip, direct_port, direct_connection_epoch, direct_last_seen_at").
+		Where("device_id = ? AND user_id = ?", input.TargetDeviceID, input.UserID).Take(&direct).Error; err != nil {
+		return deviceLinkTarget{}, ErrUnavailable
+	}
+	if direct.ModeEnabled {
+		if !direct.EndpointEnabled || direct.LastSeenAt == nil || !direct.LastSeenAt.After(now.Add(-directPresenceTTL)) {
+			return deviceLinkTarget{}, ErrDirectUnavailable
+		}
+		return directDeviceLinkTarget(input.TargetDeviceID, direct.IP, direct.Port, direct.ConnectionEpoch, direct.TLSEnabled)
+	}
+
+	route, err := resolveDeviceLinkRoute(ctx, issuer.routes, input.TargetDeviceID.String(), now)
+	if err != nil {
+		return deviceLinkTarget{}, err
+	}
+	nodeID, nodeErr := uuid.Parse(route.NodeID)
+	cellID, cellErr := uuid.Parse(route.CellID)
+	if nodeErr != nil || cellErr != nil || route.DeviceID != input.TargetDeviceID.String() || route.UserID != input.UserID.String() ||
+		route.GrantVersion != input.TargetGrantVersion || route.ConnectionEpoch == 0 {
+		return deviceLinkTarget{}, ErrUnavailable
+	}
+	if route.ProtocolVersion != 2 {
+		return deviceLinkTarget{}, ErrProtocolVersion
+	}
+	endpoint, err := loadRelayV2Endpoint(ctx, issuer.db, nodeID, cellID, now)
+	if err != nil {
+		return deviceLinkTarget{}, err
+	}
+	return deviceLinkTarget{ConnectionMode: "relay", URL: endpoint, NodeID: nodeID, CellID: cellID, ConnectionEpoch: route.ConnectionEpoch}, nil
+}
+
+func directDeviceLinkTarget(deviceID uuid.UUID, rawIP string, rawPort, rawEpoch int64, tlsEnabled bool) (deviceLinkTarget, error) {
+	address, err := netip.ParseAddr(strings.TrimSpace(rawIP))
+	if deviceID == uuid.Nil || err != nil || address.IsUnspecified() || address.IsMulticast() || rawPort < 1 || rawPort > 65535 || rawEpoch < 1 {
+		return deviceLinkTarget{}, ErrDirectUnavailable
+	}
+	address = address.Unmap()
+	scheme := "ws"
+	if tlsEnabled {
+		scheme = "wss"
+	}
+	endpoint := (&url.URL{
+		Scheme: scheme, Host: net.JoinHostPort(address.String(), strconv.FormatInt(rawPort, 10)), Path: "/v2/connect",
+	}).String()
+	return deviceLinkTarget{
+		ConnectionMode: "direct", URL: endpoint,
+		NodeID:          uuid.NewSHA1(uuid.NameSpaceOID, []byte("wenzwork-direct-node:"+deviceID.String())),
+		CellID:          uuid.NewSHA1(uuid.NameSpaceOID, []byte("wenzwork-direct-cell:"+deviceID.String())),
+		ConnectionEpoch: uint64(rawEpoch),
 	}, nil
 }
 

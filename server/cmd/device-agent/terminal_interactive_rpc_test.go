@@ -126,6 +126,9 @@ func newTerminalTestFixture(t *testing.T) terminalTestFixture {
 	t.Cleanup(setInteractiveTerminalRuntimeProbe(func() bool { return true }))
 	starter := new(fakePTYStarter)
 	supervisor := newProcessSupervisorWithDependencies(starter, func(int) (uint64, error) { return 0, nil }, maximumTerminalSessions)
+	supervisor.hostEnvironment = func() []string {
+		return []string{"PATH=trusted-system-path", "TERMINAL_TEST_SYSTEM_ENV=preserved"}
+	}
 	service := newTerminalService(state, supervisor)
 	service.shellArgv = func(string) ([]string, string, error) {
 		return []string{filepath.Join(projectRoot, "fake-shell")}, "fake", nil
@@ -155,6 +158,10 @@ func (fixture terminalTestFixture) open(t *testing.T) (map[string]any, uuid.UUID
 	fixture.service.mu.Unlock()
 	if session == nil || fixture.starter.latest() == nil {
 		t.Fatal("terminal session or fake PTY was not created")
+	}
+	if specs := fixture.starter.specs; len(specs) != 1 ||
+		!slices.Contains(specs[0].Environment, "TERMINAL_TEST_SYSTEM_ENV=preserved") {
+		t.Fatalf("terminal did not inherit the host environment: %#v", specs)
 	}
 	replayed, err := fixture.service.Open(fixture.project, rpcInput{
 		"clientRequestId": requestID.String(), "cwd": "", "shell": "fake", "rows": float64(30), "columns": float64(100),

@@ -29,6 +29,12 @@ const device = (overrides: Partial<RemoteDevice> = {}): RemoteDevice => ({
   lastSeenAt: '2026-08-08T00:00:00Z',
   lastSyncAt: '2026-08-08T00:00:00Z',
   remoteEnabledAt: '2026-08-08T00:00:00Z',
+  connectionMode: 'relay',
+  directModeEnabled: false,
+  directAvailable: false,
+  directTlsEnabled: false,
+  directIp: null,
+  directPort: null,
   ...overrides,
 })
 

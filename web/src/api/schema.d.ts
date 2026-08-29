@@ -1034,11 +1034,63 @@ export interface paths {
      */
     get: operations['getSystemSetup']
     /**
-     * 校验依赖与管理员邮箱、初始化目标数据库并写入安装目录 .env
-     * @description 仅超级管理员可在首次初始化时执行。Host 会先确认 PostgreSQL/Redis 连通性并向默认管理员实投测试邮件，再应用迁移并创建同一默认管理员；配置文件成功写入后需要重启 Host。
+     * 校验数据服务、初始化目标数据库并写入安装目录 .env
+     * @description 仅超级管理员可在首次初始化时执行。Host 会确认 PostgreSQL/Redis 连通性，再应用迁移并创建同一默认管理员；系统邮箱为可选项，可通过独立测试接口验证，完整配置会同时加密保存到数据库。配置文件成功写入后需要重启 Host。
      */
     put: operations['applySystemSetup']
     post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/admin/system-email': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** 读取当前生效的系统邮箱配置来源与非敏感字段 */
+    get: operations['getSystemEmailSettings']
+    /** 保存并立即启用数据库动态系统邮箱配置 */
+    put: operations['updateSystemEmailSettings']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/admin/system-email/test': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 使用页面当前填写且尚未保存的配置发送测试邮件 */
+    post: operations['testSystemEmailSettings']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/admin/system-email/reset': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 删除数据库优先配置并恢复使用本地保底配置 */
+    post: operations['resetSystemEmailSettings']
     delete?: never
     options?: never
     head?: never
@@ -1106,13 +1158,15 @@ export interface paths {
       cookie?: never
     }
     /**
-     * 查询设备接入会员门禁与账号设备上限
-     * @description 仅允许具备 admin.memberships.manage 权限的会话访问；设备上限从数据库实时读取并立即用于后续设备注册。
+     * 查询旧版全局设备上限
+     * @deprecated
+     * @description 兼容旧管理端保留；运行时现已按价格套餐已发布版本中的 deviceLimit 执行，请使用价格管理接口读取新配置。
      */
     get: operations['getRemoteAccessPolicy']
     /**
-     * 动态调整每个账号允许接入的设备数量
-     * @description 更新立即生效且不强制删除已接入设备；当现有数量高于新上限时，仅阻止继续新增。
+     * 更新旧版全局设备上限
+     * @deprecated
+     * @description 仅为旧管理端兼容保留，不再改变套餐运行时限额；请在价格管理中编辑并发布对应套餐。
      */
     put: operations['updateRemoteAccessPolicy']
     post?: never
@@ -1492,8 +1546,8 @@ export interface paths {
     options?: never
     head?: never
     /**
-     * 修改当前用户的一台远程设备显示名称
-     * @description 仅允许修改账户拥有的显示名称；平台、Agent 版本和设备身份仍由受控端上报。
+     * 修改当前用户的一台远程设备名称与连接模式
+     * @description 仅允许修改账户拥有的显示名称和 Relay/直连选择；平台、Agent 版本、设备身份及直连 IP/端口仍由受控端上报。
      */
     patch: operations['updateRemoteDevice']
     trace?: never
@@ -1825,6 +1879,26 @@ export interface paths {
     put?: never
     /** 使用应用访问令牌注册远程设备身份公钥 */
     post: operations['registerRemoteDevice']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/device/direct-heartbeats': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * 刷新当前 Device Agent 直连监听器在线状态
+     * @description 仅匹配注册时上报的 IP、端口与连接代次；过期进程不能刷新新监听器的在线状态。
+     */
+    post: operations['heartbeatRemoteDeviceDirectEndpoint']
     delete?: never
     options?: never
     head?: never
@@ -2944,6 +3018,15 @@ export interface components {
       /** @enum {string} */
       billingPeriod: 'free' | 'month' | 'year' | 'one_time' | 'redemption'
       features: string[]
+      /** @description 当前已发布套餐是否允许使用远程设备；Free 开启后，普通注册用户可临时使用。 */
+      remoteAccessEnabled: boolean
+      /** @description 该套餐每个账号最多保留的已接入设备凭据数量。 */
+      deviceLimit: number
+      /**
+       * Format: int64
+       * @description 每账号月流量上限（GB）；null 表示不限流量。当前仅保存和展示，尚未执行流量拦截。
+       */
+      monthlyTrafficLimitGb: number | null
     }
     ReleaseList: {
       items: components['schemas']['Release'][]
@@ -3020,6 +3103,15 @@ export interface components {
       /** @enum {string} */
       billingPeriod: 'free' | 'month' | 'year' | 'one_time' | 'redemption'
       features: string[]
+      /** @description 发布该版本后是否允许此套餐账号使用远程设备；Free 开启后即临时开放普通用户使用。 */
+      remoteAccessEnabled: boolean
+      /** @description 该套餐每个账号最多保留的已接入设备凭据数量。 */
+      deviceLimit: number
+      /**
+       * Format: int64
+       * @description 每账号月流量上限（GB）；null 表示不限流量。当前仅配置，不执行拦截。
+       */
+      monthlyTrafficLimitGb: number | null
       /** @enum {string} */
       status: 'draft' | 'published' | 'archived'
       sortOrder: number
@@ -3053,6 +3145,13 @@ export interface components {
       /** @enum {string} */
       billingPeriod: 'free' | 'month' | 'year' | 'one_time' | 'redemption'
       features: string[]
+      remoteAccessEnabled: boolean
+      deviceLimit: number
+      /**
+       * Format: int64
+       * @description 每账号月流量上限（GB）；null 表示不限流量。当前仅配置，不执行拦截。
+       */
+      monthlyTrafficLimitGb: number | null
       sortOrder: number
     }
     UpdateAdminPricingPlanRequest: {
@@ -3070,6 +3169,13 @@ export interface components {
       /** @enum {string} */
       billingPeriod: 'free' | 'month' | 'year' | 'one_time' | 'redemption'
       features: string[]
+      remoteAccessEnabled: boolean
+      deviceLimit: number
+      /**
+       * Format: int64
+       * @description 每账号月流量上限（GB）；null 表示不限流量。当前仅配置，不执行拦截。
+       */
+      monthlyTrafficLimitGb: number | null
       sortOrder: number
       /** Format: int64 */
       expectedVersion: number
@@ -3690,7 +3796,7 @@ export interface components {
       reason: string
     }
     RemoteAccessPolicySettings: {
-      /** @description 每个账号最多保留的已接入设备凭据数量；默认值为 10。 */
+      /** @description 旧版全局设备上限；新运行时按已发布价格套餐的 deviceLimit 执行。 */
       deviceLimit: number
       /** Format: int64 */
       version: number
@@ -3737,6 +3843,7 @@ export interface components {
       smtpHost: string
       smtpPort: number
       smtpUser: string
+      smtpConfigured: boolean
       smtpPasswordConfigured: boolean
       mailFrom: string
       /** @description 是否为浏览器会话 Cookie 启用 Secure 属性；仅可与 HTTPS 站点地址组合使用。 */
@@ -3754,7 +3861,7 @@ export interface components {
       publicBaseUrl: string
       databaseUrl: string
       redisUrl: string
-      smtpHost: string
+      smtpHost?: string
       smtpPort: number
       smtpUser: string
       /**
@@ -3763,7 +3870,7 @@ export interface components {
        */
       smtpPassword?: string
       clearSmtpPassword: boolean
-      mailFrom: string
+      mailFrom?: string
       /** @description 显式选择是否为浏览器会话 Cookie 启用 Secure 属性；启用时站点地址必须为 HTTPS。 */
       cookieSecure: boolean
       /** @description 显式选择是否强制管理员会话完成 TOTP 二次验证。 */
@@ -3777,6 +3884,46 @@ export interface components {
     SystemSetupApplyResponse: {
       settings: components['schemas']['SystemSetupSettings']
       restartRequired: boolean
+    }
+    SystemEmailSettings: {
+      configured: boolean
+      /** @enum {string} */
+      source: 'database' | 'local' | 'unconfigured'
+      smtpHost: string
+      smtpPort: number
+      smtpUser: string
+      smtpPasswordConfigured: boolean
+      mailFrom: string
+      /** Format: int64 */
+      version: number
+      /** Format: date-time */
+      updatedAt: string
+    }
+    UpdateSystemEmailSettingsRequest: {
+      smtpHost: string
+      smtpPort: number
+      smtpUser: string
+      /** Format: password */
+      smtpPassword?: string
+      clearSmtpPassword: boolean
+      mailFrom: string
+      /** Format: int64 */
+      expectedVersion: number
+    }
+    TestSystemEmailSettingsRequest: {
+      smtpHost: string
+      smtpPort: number
+      smtpUser: string
+      /** Format: password */
+      smtpPassword?: string
+      clearSmtpPassword: boolean
+      mailFrom: string
+      /** Format: email */
+      recipient: string
+    }
+    ResetSystemEmailSettingsRequest: {
+      /** Format: int64 */
+      expectedVersion: number
     }
     ResetPasswordRequest: {
       token: string
@@ -4381,12 +4528,28 @@ export interface components {
       lastSyncAt: string | null
       /** Format: date-time */
       remoteEnabledAt: string | null
+      /**
+       * @description 当前账户为该设备选择的 Carrier 连接层。
+       * @enum {string}
+       */
+      connectionMode: 'relay' | 'direct'
+      /** @description 账户是否明确选择直连；与 Agent 是否已开启监听分开保存。 */
+      directModeEnabled: boolean
+      /** @description Agent 已上报直连端点且最近 45 秒内持续心跳。 */
+      directAvailable: boolean
+      /** @description 直连入口是否使用配置证书提供 WSS。 */
+      directTlsEnabled: boolean
+      /** @description Agent 配置并上报的 IPv4 或 IPv6 地址；未开启监听时为 null。 */
+      directIp: string | null
+      directPort: number | null
     }
     RemoteDeviceResponse: {
       device: components['schemas']['RemoteDevice']
     }
     RemoteDeviceUpdateRequest: {
       deviceName: string
+      /** @description true 时要求 Agent 直连端点当前有有效心跳；false 恢复 Relay 中转模式。 */
+      directModeEnabled?: boolean
     }
     RemoteDeviceList: {
       items: components['schemas']['RemoteDevice'][]
@@ -4789,11 +4952,42 @@ export interface components {
       identityAlgorithm: 'ed25519'
       identityPublicKey: string
       proof: string
+      /**
+       * @description Device Agent 是否已成功绑定直连监听器。
+       * @default false
+       */
+      directEnabled: boolean
+      /**
+       * @description 直连监听器是否已加载与 directIp 匹配的 TLS 证书并提供 WSS。
+       * @default false
+       */
+      directTlsEnabled: boolean
+      /** @description 直连关闭时省略或传空字符串；开启时必须是可连接的单播 IP。 */
+      directIp?: string
+      directPort?: number
+      /**
+       * Format: int64
+       * @description 直连关闭时为 0；每次启动监听器时由 Agent 单调递增。
+       */
+      directConnectionEpoch?: number
     }
     RegisterRemoteDeviceResponse: {
       device: components['schemas']['RemoteDevice']
       publicKeyThumbprint: string
       approvalRequired: boolean
+      /** @description 仅在 Agent 启用直连时返回，用于验证直连 Carrier 与 LINK_INIT 携带的授权。 */
+      deviceLinkGrantTrust?: components['schemas']['DeviceLinkGrantTrustBundle']
+    }
+    RemoteDeviceDirectHeartbeatRequest: {
+      ip: string
+      port: number
+      /** Format: int64 */
+      connectionEpoch: number
+      tlsEnabled: boolean
+    }
+    RemoteDeviceDirectHeartbeatResponse: {
+      /** @description 当前账户是否仍启用该设备的 IP 直连模式。 */
+      enabled: boolean
     }
     /** @description 桌面设备连接中继服务时使用的公网接入地址。 */
     RelayEndpoint: {
@@ -4922,7 +5116,21 @@ export interface components {
       expiresAt: string
       /** @description 0 表示长期口令；5～900 仅用于兼容显式请求的短期 Grant。 */
       maximumLifetimeSeconds: number
-      /** Format: uri */
+      /**
+       * @description Carrier 使用 Relay 中转或直接连接 Device Agent。
+       * @enum {string}
+       */
+      connectionMode: 'relay' | 'direct'
+      /**
+       * Format: uri
+       * @description 当前连接层的 WebSocket 地址；客户端应优先使用此字段。
+       */
+      connectionUrl: string
+      /**
+       * Format: uri
+       * @deprecated
+       * @description 兼容旧 remote/v2 客户端的连接地址别名；直连模式下同样等于 connectionUrl。
+       */
       relayUrl: string
       /** Format: uuid */
       relayNodeId: string
@@ -7713,6 +7921,113 @@ export interface operations {
       503: components['responses']['Problem']
     }
   }
+  getSystemEmailSettings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description 数据库动态配置优先；没有数据库配置时返回本地保底配置 */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SystemEmailSettings']
+        }
+      }
+      401: components['responses']['Problem']
+      403: components['responses']['Problem']
+      503: components['responses']['Problem']
+    }
+  }
+  updateSystemEmailSettings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateSystemEmailSettingsRequest']
+      }
+    }
+    responses: {
+      /** @description 新配置已立即生效 */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SystemEmailSettings']
+        }
+      }
+      400: components['responses']['Problem']
+      401: components['responses']['Problem']
+      403: components['responses']['Problem']
+      409: components['responses']['Problem']
+      503: components['responses']['Problem']
+    }
+  }
+  testSystemEmailSettings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TestSystemEmailSettingsRequest']
+      }
+    }
+    responses: {
+      /** @description SMTP 服务器已接受测试邮件 */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: components['responses']['Problem']
+      401: components['responses']['Problem']
+      403: components['responses']['Problem']
+      503: components['responses']['Problem']
+    }
+  }
+  resetSystemEmailSettings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ResetSystemEmailSettingsRequest']
+      }
+    }
+    responses: {
+      /** @description 已恢复本地保底配置 */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SystemEmailSettings']
+        }
+      }
+      400: components['responses']['Problem']
+      401: components['responses']['Problem']
+      403: components['responses']['Problem']
+      409: components['responses']['Problem']
+      503: components['responses']['Problem']
+    }
+  }
   listAdminUsers: {
     parameters: {
       query?: {
@@ -8668,6 +8983,7 @@ export interface operations {
       400: components['responses']['Problem']
       401: components['responses']['Problem']
       404: components['responses']['Problem']
+      409: components['responses']['Problem']
       503: components['responses']['Problem']
     }
   }
@@ -9240,6 +9556,35 @@ export interface operations {
       401: components['responses']['Problem']
       403: components['responses']['Problem']
       409: components['responses']['Problem']
+      503: components['responses']['Problem']
+    }
+  }
+  heartbeatRemoteDeviceDirectEndpoint: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RemoteDeviceDirectHeartbeatRequest']
+      }
+    }
+    responses: {
+      /** @description 直连监听器在线状态已刷新，并返回当前账户是否仍允许直连 */
+      200: {
+        headers: {
+          'Cache-Control'?: 'no-store'
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RemoteDeviceDirectHeartbeatResponse']
+        }
+      }
+      400: components['responses']['Problem']
+      401: components['responses']['Problem']
+      403: components['responses']['Problem']
       503: components['responses']['Problem']
     }
   }

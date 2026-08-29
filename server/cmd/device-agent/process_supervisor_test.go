@@ -197,6 +197,52 @@ func TestProcessSupervisorEnforcesRootConcurrencyOutputAndLifetime(t *testing.T)
 	}
 }
 
+func TestProcessSupervisorUserTerminalPreservesHostEnvironment(t *testing.T) {
+	root := t.TempDir()
+	starter := new(fakePTYStarter)
+	supervisor := newProcessSupervisorWithDependencies(starter, func(int) (uint64, error) { return 0, nil }, 2)
+	supervisor.environmentProvider = func() []string { return []string{"EXPLICIT_AGENT_VALUE=configured"} }
+	supervisor.hostEnvironment = func() []string {
+		return []string{
+			"PATH=trusted-system-path",
+			"CUSTOM_SYSTEM_VALUE=from-host",
+			"WENZWORK_DEVICE_ACCESS_KEY=must-not-leak",
+		}
+	}
+	base := processLaunchSpec{
+		ProjectID: uuid.New(), ProjectRoot: root, WorkingDirectory: root,
+		Argv: []string{filepath.Join(root, "fake-shell")}, Rows: 24, Columns: 80,
+		Limits: processResourceLimits{MaximumLifetime: time.Minute, MaximumMemoryBytes: 1024, MaximumOutputBytes: 1024},
+	}
+
+	interactive := base
+	interactive.InheritHostEnvironment = true
+	process, err := supervisor.Start(interactive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment := starter.specs[0].Environment
+	if !slices.Contains(environment, "CUSTOM_SYSTEM_VALUE=from-host") ||
+		!slices.Contains(environment, "EXPLICIT_AGENT_VALUE=configured") ||
+		slices.Contains(environment, "WENZWORK_DEVICE_ACCESS_KEY=must-not-leak") {
+		t.Fatalf("interactive terminal environment = %#v", environment)
+	}
+	starter.processes[0].finish(0)
+	process.release()
+
+	automated, err := supervisor.Start(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment = starter.specs[1].Environment
+	if slices.Contains(environment, "CUSTOM_SYSTEM_VALUE=from-host") ||
+		!slices.Contains(environment, "EXPLICIT_AGENT_VALUE=configured") {
+		t.Fatalf("automated PTY environment = %#v", environment)
+	}
+	starter.processes[1].finish(0)
+	automated.release()
+}
+
 func TestProcessSupervisorEnforcesProcessTreeMemoryAndAgentExitCleanup(t *testing.T) {
 	root := t.TempDir()
 	starter := new(fakePTYStarter)

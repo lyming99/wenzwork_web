@@ -261,6 +261,9 @@ type agentState struct {
 	LegacyConversations map[string]conversation `json:"conversations,omitempty"`
 	Conversations       map[string]conversation `json:"-"`
 	agentEnvironment    map[string]string       `json:"-"`
+	// terminalHostEnvironment is captured before agent.env is loaded. It is
+	// available only to user-opened interactive terminals.
+	terminalHostEnvironment []string `json:"-"`
 
 	path         string
 	identity     ed25519.PrivateKey
@@ -350,7 +353,8 @@ func loadOrCreateAgentState(path, workspace string) (*agentState, error) {
 		state := &agentState{
 			SchemaVersion: agentStateVersion, DeviceID: uuid.New(), PrivateKey: base64.RawURLEncoding.EncodeToString(privateKey),
 			KeyVersion: 1, Revision: 1, Workspace: workspace, AgentEnvironmentRevision: 1, AIConfigs: map[string]aiConfig{},
-			Conversations: map[string]conversation{}, aiGenerations: map[string]activeAIGeneration{}, aiGoalArmed: map[string]string{}, path: path, identity: privateKey,
+			Conversations: map[string]conversation{}, aiGenerations: map[string]activeAIGeneration{}, aiGoalArmed: map[string]string{},
+			terminalHostEnvironment: os.Environ(), path: path, identity: privateKey,
 		}
 		if err := state.write(); err != nil {
 			return nil, err
@@ -430,6 +434,7 @@ func loadOrCreateAgentState(path, workspace string) (*agentState, error) {
 	state.aiGenerations = map[string]activeAIGeneration{}
 	state.aiGoalArmed = map[string]string{}
 	state.agentEnvironment = map[string]string{}
+	state.terminalHostEnvironment = os.Environ()
 	if state.AgentEnvironmentRevision == 0 {
 		state.AgentEnvironmentRevision = 1
 	}
@@ -728,7 +733,7 @@ func (state *agentState) terminalService() (*terminalService, error) {
 		return state.terminals, nil
 	}
 	if state.processes == nil {
-		state.processes = newProcessSupervisor(state.agentEnvironmentList)
+		state.processes = newProcessSupervisor(state.agentEnvironmentList, state.terminalHostEnvironmentList)
 	}
 	state.terminals = newTerminalService(state, state.processes)
 	return state.terminals, nil
@@ -747,7 +752,7 @@ func (state *agentState) aiWorkspaceTools() (*aiWorkspaceToolExecutor, error) {
 		state.rawProcesses = newRawProcessSupervisor(state.agentEnvironmentList)
 	}
 	if state.processes == nil {
-		state.processes = newProcessSupervisor(state.agentEnvironmentList)
+		state.processes = newProcessSupervisor(state.agentEnvironmentList, state.terminalHostEnvironmentList)
 	}
 	state.aiTools = newAIWorkspaceToolExecutor(state, state.rawProcesses, state.processes)
 	return state.aiTools, nil

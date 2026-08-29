@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"net/netip"
 	"regexp"
 	"slices"
 	"strings"
@@ -35,6 +37,7 @@ var (
 var idempotencyPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{8,128}$`)
 
 var allowedDeviceCapabilities = map[string]struct{}{
+	"direct.connect":                   {},
 	"relay.ping":                       {},
 	"remote.project.sync":              {},
 	"remote.task.workspace.inspect":    {},
@@ -67,41 +70,67 @@ var allowedDeviceScopes = map[string]struct{}{
 }
 
 type Credential struct {
-	DeviceID            uuid.UUID
-	UserID              uuid.UUID
-	RegisteredSessionID uuid.UUID
-	DeviceName          string
-	Platform            string
-	AgentVersion        string
-	ProtocolMin         uint32
-	ProtocolMax         uint32
-	Capabilities        []string
-	Scopes              []string
-	IdentityPublicKey   ed25519.PublicKey
-	PublicKeyThumbprint string
-	KeyVersion          uint64
-	GrantVersion        uint64
-	Status              string
-	LastConnectionEpoch uint64
-	LastAllocationAt    *time.Time
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	DeviceID              uuid.UUID
+	UserID                uuid.UUID
+	RegisteredSessionID   uuid.UUID
+	DeviceName            string
+	Platform              string
+	AgentVersion          string
+	ProtocolMin           uint32
+	ProtocolMax           uint32
+	Capabilities          []string
+	Scopes                []string
+	IdentityPublicKey     ed25519.PublicKey
+	PublicKeyThumbprint   string
+	KeyVersion            uint64
+	GrantVersion          uint64
+	Status                string
+	LastConnectionEpoch   uint64
+	LastAllocationAt      *time.Time
+	DirectModeEnabled     bool
+	DirectEnabled         bool
+	DirectTLSEnabled      bool
+	DirectIP              string
+	DirectPort            uint32
+	DirectConnectionEpoch uint64
+	DirectLastSeenAt      *time.Time
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
 }
 
 type RegisterInput struct {
-	UserID            uuid.UUID
-	SessionID         uuid.UUID
-	DeviceID          uuid.UUID
-	IdempotencyKey    string
-	DeviceName        string
-	Platform          string
-	AgentVersion      string
-	ProtocolMin       uint32
-	ProtocolMax       uint32
-	Capabilities      []string
-	IdentityAlgorithm string
-	IdentityPublicKey string
-	Proof             string
+	UserID                uuid.UUID
+	SessionID             uuid.UUID
+	DeviceID              uuid.UUID
+	IdempotencyKey        string
+	DeviceName            string
+	Platform              string
+	AgentVersion          string
+	ProtocolMin           uint32
+	ProtocolMax           uint32
+	Capabilities          []string
+	IdentityAlgorithm     string
+	IdentityPublicKey     string
+	Proof                 string
+	DirectEnabled         bool
+	DirectTLSEnabled      bool
+	DirectIP              string
+	DirectPort            uint32
+	DirectConnectionEpoch uint64
+}
+
+type DirectHeartbeatInput struct {
+	UserID          uuid.UUID
+	SessionID       uuid.UUID
+	DeviceID        uuid.UUID
+	IP              string
+	Port            uint32
+	ConnectionEpoch uint64
+	TLSEnabled      bool
+}
+
+type DirectHeartbeatResult struct {
+	Enabled bool `json:"enabled"`
 }
 
 type Registration struct {
@@ -175,6 +204,16 @@ func (service *Service) Register(ctx context.Context, input RegisterInput) (Regi
 		return Registration{}, err
 	}
 	return registration, nil
+}
+
+// HeartbeatDirect proves that the configured direct listener is still owned
+// by the currently authenticated Agent process. It never changes the
+// account-owned direct-mode preference or endpoint coordinates.
+func (service *Service) HeartbeatDirect(ctx context.Context, input DirectHeartbeatInput) (DirectHeartbeatResult, error) {
+	if service == nil || service.store == nil {
+		return DirectHeartbeatResult{}, ErrUnavailable
+	}
+	return service.store.HeartbeatDirect(ctx, input)
 }
 
 // BootstrapAccessKey exchanges a management-issued DeviceKey for short-lived
@@ -316,7 +355,7 @@ func (store *Store) Register(ctx context.Context, input RegisterInput) (Registra
 		rowErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&row, "device_id = ?", normalized.DeviceID).Error
 		created := false
 		if errors.Is(rowErr, gorm.ErrRecordNotFound) {
-			if _, err := store.policy.RequireDeviceCapacityTx(tx, normalized.UserID); err != nil {
+			if _, err := store.policy.RequireDeviceCapacityTx(tx, normalized.UserID, now); err != nil {
 				return err
 			}
 			capabilities, _ := json.Marshal(normalized.Capabilities)
@@ -326,7 +365,13 @@ func (store *Store) Register(ctx context.Context, input RegisterInput) (Registra
 				ProtocolMin: int64(normalized.ProtocolMin), ProtocolMax: int64(normalized.ProtocolMax), Capabilities: capabilities,
 				Scopes: scopesJSON, KeyVersion: 1,
 				IdentityPublicKey: append([]byte(nil), publicKey...), PublicKeyThumbprint: remoteauth.PublicKeyThumbprint(publicKey),
-				GrantVersion: 1, Status: "active", LastConnectionEpoch: 0, CreatedAt: now, UpdatedAt: now,
+				GrantVersion: 1, Status: "active", LastConnectionEpoch: 0,
+				DirectEndpointEnabled: normalized.DirectEnabled, DirectTLSEnabled: normalized.DirectTLSEnabled, DirectIP: normalized.DirectIP,
+				DirectPort: int64(normalized.DirectPort), DirectConnectionEpoch: int64(normalized.DirectConnectionEpoch),
+				CreatedAt: now, UpdatedAt: now,
+			}
+			if normalized.DirectEnabled {
+				row.DirectLastSeenAt = &now
 			}
 			if err := tx.Create(&row).Error; err != nil {
 				return fmt.Errorf("create remote device credential: %w", err)
@@ -392,7 +437,62 @@ func refreshCredentialAgentMetadata(row *credentialRow, registration RegisterInp
 	row.Platform, row.AgentVersion = registration.Platform, registration.AgentVersion
 	row.ProtocolMin, row.ProtocolMax, row.Capabilities = int64(registration.ProtocolMin), int64(registration.ProtocolMax), capabilities
 	row.Scopes = scopes
+	row.DirectEndpointEnabled, row.DirectIP = registration.DirectEnabled, registration.DirectIP
+	row.DirectTLSEnabled = registration.DirectTLSEnabled
+	row.DirectPort, row.DirectConnectionEpoch = int64(registration.DirectPort), int64(registration.DirectConnectionEpoch)
+	if registration.DirectEnabled {
+		row.DirectLastSeenAt = &now
+	} else {
+		row.DirectLastSeenAt = nil
+	}
 	row.UpdatedAt = now
+}
+
+func (store *Store) HeartbeatDirect(ctx context.Context, input DirectHeartbeatInput) (DirectHeartbeatResult, error) {
+	input.IP = strings.TrimSpace(input.IP)
+	address, err := netip.ParseAddr(input.IP)
+	if err != nil {
+		return DirectHeartbeatResult{}, ErrInvalidInput
+	}
+	address = address.Unmap()
+	input.IP = address.String()
+	if input.UserID == uuid.Nil || input.SessionID == uuid.Nil || input.DeviceID == uuid.Nil ||
+		address.IsUnspecified() || address.IsMulticast() || input.Port == 0 || input.Port > math.MaxUint16 ||
+		input.ConnectionEpoch == 0 || input.ConnectionEpoch > math.MaxInt64 {
+		return DirectHeartbeatResult{}, ErrInvalidInput
+	}
+	now := store.now().UTC()
+	result := store.db.WithContext(ctx).Exec(`
+		UPDATE remote_device_credentials credential
+		SET direct_last_seen_at = ?
+		WHERE credential.device_id = ? AND credential.user_id = ? AND credential.status = 'active'
+		  AND credential.direct_endpoint_enabled
+		  AND credential.direct_ip = ? AND credential.direct_port = ? AND credential.direct_connection_epoch = ?
+		  AND credential.direct_tls_enabled = ?
+		  AND EXISTS (
+		      SELECT 1 FROM app_sessions session
+		      WHERE session.id = ? AND session.user_id = credential.user_id AND session.device_id = credential.device_id
+		        AND session.revoked_at IS NULL AND session.idle_expires_at > ?
+		  )`, now, input.DeviceID, input.UserID, input.IP, input.Port, input.ConnectionEpoch, input.TLSEnabled, input.SessionID, now)
+	if result.Error != nil {
+		return DirectHeartbeatResult{}, fmt.Errorf("%w: update direct endpoint heartbeat: %v", ErrUnavailable, result.Error)
+	}
+	if result.RowsAffected != 1 {
+		return DirectHeartbeatResult{}, ErrForbidden
+	}
+	var state DirectHeartbeatResult
+	if err := store.db.WithContext(ctx).Raw(`
+		SELECT credential.direct_mode_enabled
+		       AND credential.direct_endpoint_enabled
+		       AND credential.status = 'active'
+		       AND COALESCE(access_grant.status = 'enabled', false) AS enabled
+		FROM remote_device_credentials credential
+		LEFT JOIN remote_access_grants access_grant
+		  ON access_grant.device_id = credential.device_id AND access_grant.user_id = credential.user_id
+		WHERE credential.device_id = ? AND credential.user_id = ?`, input.DeviceID, input.UserID).Take(&state).Error; err != nil {
+		return DirectHeartbeatResult{}, fmt.Errorf("%w: read direct endpoint authorization: %v", ErrUnavailable, err)
+	}
+	return state, nil
 }
 
 func createDefaultRemoteAccessGrant(tx *gorm.DB, credential credentialRow, now time.Time) error {
@@ -422,11 +522,26 @@ func normalizeRegistration(input RegisterInput) (RegisterInput, ed25519.PublicKe
 	input.IdentityAlgorithm = strings.ToLower(strings.TrimSpace(input.IdentityAlgorithm))
 	input.IdentityPublicKey = strings.TrimSpace(input.IdentityPublicKey)
 	input.Proof = strings.TrimSpace(input.Proof)
+	input.DirectIP = strings.TrimSpace(input.DirectIP)
 	if input.UserID == uuid.Nil || input.SessionID == uuid.Nil || input.DeviceID == uuid.Nil || !idempotencyPattern.MatchString(input.IdempotencyKey) ||
 		!validText(input.DeviceName, 120) || !validText(input.AgentVersion, 64) ||
 		(input.Platform != "windows" && input.Platform != "macos" && input.Platform != "linux") || input.IdentityAlgorithm != "ed25519" ||
 		input.ProtocolMin != 2 || input.ProtocolMax != 2 {
 		return RegisterInput{}, nil, "", ErrInvalidInput
+	}
+	if input.DirectEnabled {
+		address, addressErr := netip.ParseAddr(input.DirectIP)
+		if addressErr != nil {
+			return RegisterInput{}, nil, "", ErrInvalidInput
+		}
+		address = address.Unmap()
+		if address.IsUnspecified() || address.IsMulticast() || input.DirectPort == 0 || input.DirectPort > math.MaxUint16 ||
+			input.DirectConnectionEpoch == 0 || input.DirectConnectionEpoch > math.MaxInt64 {
+			return RegisterInput{}, nil, "", ErrInvalidInput
+		}
+		input.DirectIP = address.String()
+	} else {
+		input.DirectIP, input.DirectPort, input.DirectConnectionEpoch, input.DirectTLSEnabled = "", 0, 0, false
 	}
 	if len(input.Capabilities) == 0 {
 		input.Capabilities = []string{"relay.ping"}
@@ -458,7 +573,16 @@ func normalizeRegistration(input RegisterInput) (RegisterInput, ed25519.PublicKe
 		ProtocolMin, ProtocolMax              uint32
 		Capabilities                          []string
 		IdentityAlgorithm, IdentityKey, Proof string
-	}{input.DeviceName, input.Platform, input.AgentVersion, input.ProtocolMin, input.ProtocolMax, input.Capabilities, input.IdentityAlgorithm, input.IdentityPublicKey, input.Proof})
+		DirectEnabled                         bool
+		DirectTLSEnabled                      bool
+		DirectIP                              string
+		DirectPort                            uint32
+		DirectConnectionEpoch                 uint64
+	}{
+		input.DeviceName, input.Platform, input.AgentVersion, input.ProtocolMin, input.ProtocolMax,
+		input.Capabilities, input.IdentityAlgorithm, input.IdentityPublicKey, input.Proof,
+		input.DirectEnabled, input.DirectTLSEnabled, input.DirectIP, input.DirectPort, input.DirectConnectionEpoch,
+	})
 	digest := sha256.Sum256(requestBytes)
 	return input, ed25519.PublicKey(rawKey), hex.EncodeToString(digest[:]), nil
 }
@@ -488,7 +612,10 @@ func credentialFromRow(row credentialRow) (Credential, error) {
 	var scopes []string
 	if json.Unmarshal(row.Capabilities, &capabilities) != nil || json.Unmarshal(row.Scopes, &scopes) != nil ||
 		len(row.IdentityPublicKey) != ed25519.PublicKeySize || row.KeyVersion < 1 || row.GrantVersion < 1 ||
-		row.ProtocolMin != 2 || row.ProtocolMax != 2 || row.LastConnectionEpoch < 0 {
+		row.ProtocolMin != 2 || row.ProtocolMax != 2 || row.LastConnectionEpoch < 0 ||
+		row.DirectPort < 0 || row.DirectPort > math.MaxUint16 || row.DirectConnectionEpoch < 0 ||
+		(row.DirectEndpointEnabled != (row.DirectIP != "" && row.DirectPort > 0 && row.DirectConnectionEpoch > 0 && row.DirectLastSeenAt != nil)) ||
+		(!row.DirectEndpointEnabled && row.DirectTLSEnabled) {
 		return Credential{}, ErrInvalidInput
 	}
 	if _, err := normalizeCapabilities(capabilities); err != nil {
@@ -504,7 +631,10 @@ func credentialFromRow(row credentialRow) (Credential, error) {
 		ProtocolMin: uint32(row.ProtocolMin), ProtocolMax: uint32(row.ProtocolMax), Capabilities: capabilities, Scopes: scopes,
 		IdentityPublicKey: ed25519.PublicKey(append([]byte(nil), row.IdentityPublicKey...)), PublicKeyThumbprint: row.PublicKeyThumbprint,
 		KeyVersion: uint64(row.KeyVersion), GrantVersion: uint64(row.GrantVersion), Status: row.Status, LastConnectionEpoch: uint64(row.LastConnectionEpoch),
-		LastAllocationAt: utcPointer(row.LastAllocationAt), CreatedAt: row.CreatedAt.UTC(), UpdatedAt: row.UpdatedAt.UTC(),
+		LastAllocationAt: utcPointer(row.LastAllocationAt), DirectModeEnabled: row.DirectModeEnabled,
+		DirectEnabled: row.DirectEndpointEnabled, DirectTLSEnabled: row.DirectTLSEnabled, DirectIP: row.DirectIP, DirectPort: uint32(row.DirectPort),
+		DirectConnectionEpoch: uint64(row.DirectConnectionEpoch), DirectLastSeenAt: utcPointer(row.DirectLastSeenAt),
+		CreatedAt: row.CreatedAt.UTC(), UpdatedAt: row.UpdatedAt.UTC(),
 	}, nil
 }
 
@@ -562,25 +692,32 @@ func utcPointer(value *time.Time) *time.Time {
 }
 
 type credentialRow struct {
-	DeviceID            uuid.UUID       `gorm:"column:device_id;type:uuid;primaryKey"`
-	UserID              uuid.UUID       `gorm:"column:user_id;type:uuid"`
-	RegisteredSessionID uuid.UUID       `gorm:"column:registered_session_id;type:uuid"`
-	DeviceName          string          `gorm:"column:device_name"`
-	Platform            string          `gorm:"column:platform"`
-	AgentVersion        string          `gorm:"column:agent_version"`
-	ProtocolMin         int64           `gorm:"column:protocol_min"`
-	ProtocolMax         int64           `gorm:"column:protocol_max"`
-	Capabilities        json.RawMessage `gorm:"column:capabilities;type:jsonb"`
-	Scopes              json.RawMessage `gorm:"column:scopes;type:jsonb"`
-	IdentityPublicKey   []byte          `gorm:"column:identity_public_key"`
-	PublicKeyThumbprint string          `gorm:"column:public_key_thumbprint"`
-	KeyVersion          int64           `gorm:"column:key_version"`
-	GrantVersion        int64           `gorm:"column:grant_version"`
-	Status              string          `gorm:"column:status"`
-	LastConnectionEpoch int64           `gorm:"column:last_connection_epoch"`
-	LastAllocationAt    *time.Time      `gorm:"column:last_allocation_at"`
-	CreatedAt           time.Time       `gorm:"column:created_at"`
-	UpdatedAt           time.Time       `gorm:"column:updated_at"`
+	DeviceID              uuid.UUID       `gorm:"column:device_id;type:uuid;primaryKey"`
+	UserID                uuid.UUID       `gorm:"column:user_id;type:uuid"`
+	RegisteredSessionID   uuid.UUID       `gorm:"column:registered_session_id;type:uuid"`
+	DeviceName            string          `gorm:"column:device_name"`
+	Platform              string          `gorm:"column:platform"`
+	AgentVersion          string          `gorm:"column:agent_version"`
+	ProtocolMin           int64           `gorm:"column:protocol_min"`
+	ProtocolMax           int64           `gorm:"column:protocol_max"`
+	Capabilities          json.RawMessage `gorm:"column:capabilities;type:jsonb"`
+	Scopes                json.RawMessage `gorm:"column:scopes;type:jsonb"`
+	IdentityPublicKey     []byte          `gorm:"column:identity_public_key"`
+	PublicKeyThumbprint   string          `gorm:"column:public_key_thumbprint"`
+	KeyVersion            int64           `gorm:"column:key_version"`
+	GrantVersion          int64           `gorm:"column:grant_version"`
+	Status                string          `gorm:"column:status"`
+	LastConnectionEpoch   int64           `gorm:"column:last_connection_epoch"`
+	LastAllocationAt      *time.Time      `gorm:"column:last_allocation_at"`
+	DirectModeEnabled     bool            `gorm:"column:direct_mode_enabled"`
+	DirectEndpointEnabled bool            `gorm:"column:direct_endpoint_enabled"`
+	DirectTLSEnabled      bool            `gorm:"column:direct_tls_enabled"`
+	DirectIP              string          `gorm:"column:direct_ip"`
+	DirectPort            int64           `gorm:"column:direct_port"`
+	DirectConnectionEpoch int64           `gorm:"column:direct_connection_epoch"`
+	DirectLastSeenAt      *time.Time      `gorm:"column:direct_last_seen_at"`
+	CreatedAt             time.Time       `gorm:"column:created_at"`
+	UpdatedAt             time.Time       `gorm:"column:updated_at"`
 }
 
 func (credentialRow) TableName() string { return "remote_device_credentials" }

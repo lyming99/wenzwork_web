@@ -20,10 +20,10 @@ import (
 	"github.com/wenzwork/wenzwork-web/server/internal/catalog"
 	"github.com/wenzwork/wenzwork-web/server/internal/config"
 	"github.com/wenzwork/wenzwork-web/server/internal/database"
+	"github.com/wenzwork/wenzwork-web/server/internal/emailsettings"
 	"github.com/wenzwork/wenzwork-web/server/internal/feedback"
 	"github.com/wenzwork/wenzwork-web/server/internal/helpdocs"
 	"github.com/wenzwork/wenzwork-web/server/internal/httpapi"
-	"github.com/wenzwork/wenzwork-web/server/internal/mailer"
 	"github.com/wenzwork/wenzwork-web/server/internal/membership"
 	"github.com/wenzwork/wenzwork-web/server/internal/objectstore"
 	"github.com/wenzwork/wenzwork-web/server/internal/relayallocation"
@@ -200,12 +200,12 @@ func main() {
 		credentials, err := catalogStore.GetReleaseSourceCredentialsByRepository(ctx, repository)
 		return credentials.GitHubToken, err
 	}).WithLocalStore(releasePushAssets)
-	mailSender, err := mailer.NewSMTPSender(mailer.SMTPConfig{
+	mailSender, err := emailsettings.NewStore(db, emailsettings.Config{
 		Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUser, Password: cfg.SMTPPassword,
 		From: cfg.MailFrom, RequireTLS: cfg.Environment == "production", Timeout: 10 * time.Second,
-	})
+	}, cfg.MFAEncryptionKey)
 	if err != nil {
-		log.Error("mailer startup failed", "error", err)
+		log.Error("system email settings startup failed", "error", err)
 		os.Exit(1)
 	}
 	authConfig := auth.DefaultServiceConfig()
@@ -336,6 +336,7 @@ func main() {
 		AppAuth:                 authService,
 		UserAdmin:               authService,
 		SystemSetup:             systemSetupService,
+		SystemEmail:             mailSender,
 		Membership:              membershipStore,
 		MembershipAdmin:         membershipStore,
 		LifetimeCodeAdmin:       lifetimeCodeDeliveryService,

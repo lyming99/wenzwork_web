@@ -83,8 +83,6 @@ func registerSystemSetupRoutes(group *gin.RouterGroup, service SystemSetupServic
 			writeProblem(c, http.StatusServiceUnavailable, "system_setup_redis_unavailable", "Redis 连接失败", "请检查 Redis 地址、凭据和网络连通性。")
 		case errors.Is(err, systemsetup.ErrDatabaseUnavailable):
 			writeProblem(c, http.StatusServiceUnavailable, "system_setup_database_unavailable", "数据库初始化失败", "请检查 PostgreSQL 地址、凭据、权限和迁移目录。")
-		case errors.Is(err, systemsetup.ErrSMTPUnavailable):
-			writeProblem(c, http.StatusServiceUnavailable, "system_setup_smtp_unavailable", "管理员测试邮件发送失败", "请检查 SMTP 地址、凭据、TLS、发件人和默认管理员邮箱后重试。")
 		case errors.Is(err, systemsetup.ErrAdministratorBootstrap):
 			writeProblem(c, http.StatusConflict, "system_setup_administrator_conflict", "管理员初始化失败", "目标数据库可能已经存在另一个超级管理员。")
 		case errors.Is(err, systemsetup.ErrEnvironmentWrite):

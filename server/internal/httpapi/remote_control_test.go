@@ -340,6 +340,7 @@ func TestRemoteV2DeviceLinkUsesDeviceScopedRequestAndNoStoreResponse(t *testing.
 		}
 		return remotecontrol.DeviceLink{
 			GrantID: uuid.New(), Grant: "opaque-grant", ExpiresAt: time.Now().Add(time.Minute), MaximumLifetimeSeconds: 60,
+			ConnectionMode: "relay", ConnectionURL: "wss://relay.example.test/v2/connect",
 			RelayURL: "wss://relay.example.test/v2/connect", RelayNodeID: uuid.New(), RelayCellID: uuid.New(), TargetConnectionEpoch: 8,
 			DeviceIdentityAlgorithm: "Ed25519", DeviceIdentityPublicKey: "public", DeviceKeyThumbprint: "thumbprint", DeviceIdentityKeyVersion: 2,
 		}, nil

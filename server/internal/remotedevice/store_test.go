@@ -35,23 +35,55 @@ func TestNormalizeRegistrationAcceptsDeviceAgentCapabilities(t *testing.T) {
 	}
 }
 
+func TestNormalizeRegistrationCanonicalizesDirectEndpoint(t *testing.T) {
+	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := RegisterInput{
+		UserID: uuid.New(), SessionID: uuid.New(), DeviceID: uuid.New(), IdempotencyKey: "registration-direct-123",
+		DeviceName: "workstation", Platform: "linux", AgentVersion: "dev", ProtocolMin: 2, ProtocolMax: 2,
+		Capabilities: []string{"direct.connect", "relay.ping"}, IdentityAlgorithm: "ed25519",
+		IdentityPublicKey: base64.RawURLEncoding.EncodeToString(publicKey), Proof: "proof",
+		DirectEnabled: true, DirectTLSEnabled: true, DirectIP: "::ffff:192.0.2.30", DirectPort: 9443, DirectConnectionEpoch: 7,
+	}
+	normalized, _, _, err := normalizeRegistration(input)
+	if err != nil || normalized.DirectIP != "192.0.2.30" || normalized.DirectPort != 9443 || normalized.DirectConnectionEpoch != 7 || !normalized.DirectTLSEnabled {
+		t.Fatalf("normalized direct registration = %+v, %v", normalized, err)
+	}
+
+	input.DirectIP = "0.0.0.0"
+	if _, _, _, err := normalizeRegistration(input); err == nil {
+		t.Fatal("unspecified direct IP was accepted")
+	}
+
+	input.DirectEnabled = false
+	input.DirectIP, input.DirectPort, input.DirectConnectionEpoch = "192.0.2.30", 9443, 7
+	normalized, _, _, err = normalizeRegistration(input)
+	if err != nil || normalized.DirectIP != "" || normalized.DirectPort != 0 || normalized.DirectConnectionEpoch != 0 || normalized.DirectTLSEnabled {
+		t.Fatalf("disabled direct endpoint was not cleared: %+v, %v", normalized, err)
+	}
+}
+
 func TestRefreshCredentialAgentMetadataPreservesAccountDeviceName(t *testing.T) {
 	now := time.Date(2026, 8, 26, 4, 41, 0, 0, time.UTC)
 	row := credentialRow{
-		DeviceName:   "设计工作站",
-		Platform:     "windows",
-		AgentVersion: "v1",
-		ProtocolMin:  2,
-		ProtocolMax:  2,
-		Capabilities: json.RawMessage(`["relay.ping"]`),
-		Scopes:       json.RawMessage(`["remote.connect"]`),
+		DeviceName:        "设计工作站",
+		Platform:          "windows",
+		AgentVersion:      "v1",
+		ProtocolMin:       2,
+		ProtocolMax:       2,
+		Capabilities:      json.RawMessage(`["relay.ping"]`),
+		Scopes:            json.RawMessage(`["remote.connect"]`),
+		DirectModeEnabled: true,
 	}
 	registration := RegisterInput{
-		DeviceName:   "DESKTOP-INITIAL-NAME",
-		Platform:     "linux",
-		AgentVersion: "v2",
-		ProtocolMin:  2,
-		ProtocolMax:  2,
+		DeviceName:    "DESKTOP-INITIAL-NAME",
+		Platform:      "linux",
+		AgentVersion:  "v2",
+		ProtocolMin:   2,
+		ProtocolMax:   2,
+		DirectEnabled: true, DirectTLSEnabled: true, DirectIP: "192.0.2.20", DirectPort: 9443, DirectConnectionEpoch: 4,
 	}
 	capabilities := json.RawMessage(`["relay.ping","remote.peer.query"]`)
 	scopes := json.RawMessage(`["remote.connect","remote.peer.query"]`)
@@ -62,7 +94,9 @@ func TestRefreshCredentialAgentMetadataPreservesAccountDeviceName(t *testing.T) 
 		t.Fatalf("DeviceName = %q, want account-owned custom name", row.DeviceName)
 	}
 	if row.Platform != "linux" || row.AgentVersion != "v2" || row.ProtocolMin != 2 || row.ProtocolMax != 2 ||
-		string(row.Capabilities) != string(capabilities) || string(row.Scopes) != string(scopes) || !row.UpdatedAt.Equal(now) {
+		string(row.Capabilities) != string(capabilities) || string(row.Scopes) != string(scopes) || !row.UpdatedAt.Equal(now) ||
+		!row.DirectModeEnabled || !row.DirectEndpointEnabled || !row.DirectTLSEnabled || row.DirectIP != "192.0.2.20" || row.DirectPort != 9443 ||
+		row.DirectConnectionEpoch != 4 || row.DirectLastSeenAt == nil || !row.DirectLastSeenAt.Equal(now) {
 		t.Fatalf("Agent-owned metadata was not refreshed: %+v", row)
 	}
 }

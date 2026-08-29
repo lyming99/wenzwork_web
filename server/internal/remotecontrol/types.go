@@ -39,6 +39,7 @@ var (
 	ErrSequenceGap         = errors.New("remote control device sequence has a gap")
 	ErrPeerRequired        = errors.New("remote task content requires an end-to-end encrypted peer session")
 	ErrProtocolVersion     = errors.New("remote peer protocol version has no supported intersection")
+	ErrDirectUnavailable   = errors.New("remote direct connection is unavailable")
 	ErrUnavailable         = errors.New("remote control service is unavailable")
 
 	idempotencyPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{8,128}$`)
@@ -111,6 +112,12 @@ type Device struct {
 	LastSeenAt           *time.Time `json:"lastSeenAt"`
 	LastSyncAt           *time.Time `json:"lastSyncAt"`
 	RemoteEnabledAt      *time.Time `json:"remoteEnabledAt"`
+	ConnectionMode       string     `json:"connectionMode"`
+	DirectModeEnabled    bool       `json:"directModeEnabled"`
+	DirectAvailable      bool       `json:"directAvailable"`
+	DirectTLSEnabled     bool       `json:"directTlsEnabled"`
+	DirectIP             *string    `json:"directIp"`
+	DirectPort           *uint32    `json:"directPort"`
 	UpdatedAt            time.Time  `json:"-"`
 }
 
@@ -138,9 +145,10 @@ type DeviceDeletionInput struct {
 // DeviceUpdateInput contains the account-owned metadata a controller may
 // change. Agent-reported identity, platform and version fields stay immutable.
 type DeviceUpdateInput struct {
-	UserID     uuid.UUID
-	DeviceID   uuid.UUID
-	DeviceName string
+	UserID            uuid.UUID
+	DeviceID          uuid.UUID
+	DeviceName        string
+	DirectModeEnabled *bool
 }
 
 type AccessResult struct {
@@ -510,6 +518,8 @@ type DeviceLink struct {
 	Grant                    string    `json:"deviceConnectionGrant"`
 	ExpiresAt                time.Time `json:"expiresAt"`
 	MaximumLifetimeSeconds   uint32    `json:"maximumLifetimeSeconds"`
+	ConnectionMode           string    `json:"connectionMode"`
+	ConnectionURL            string    `json:"connectionUrl"`
 	RelayURL                 string    `json:"relayUrl"`
 	RelayNodeID              uuid.UUID `json:"relayNodeId"`
 	RelayCellID              uuid.UUID `json:"relayCellId"`

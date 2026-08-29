@@ -209,12 +209,12 @@ func (f *fakeAdminPricingService) ListAdminPricingPlans(context.Context) ([]cata
 
 func (f *fakeAdminPricingService) CreatePricingPlan(_ context.Context, input catalog.SavePricingPlanInput) (catalog.AdminPricingPlan, error) {
 	f.saveInput = input
-	return catalog.AdminPricingPlan{ID: uuid.New(), Code: input.Code, Name: input.Name, Status: "draft", Version: 1, Features: []string{}}, nil
+	return catalog.AdminPricingPlan{ID: uuid.New(), Code: input.Code, Name: input.Name, Status: "draft", Version: 1, Features: []string{}, RemoteAccessEnabled: input.RemoteAccessEnabled, DeviceLimit: input.DeviceLimit, MonthlyTrafficLimitGB: input.MonthlyTrafficLimitGB}, nil
 }
 
 func (f *fakeAdminPricingService) UpdatePricingPlan(_ context.Context, planID uuid.UUID, input catalog.SavePricingPlanInput) (catalog.AdminPricingPlan, error) {
 	f.planID, f.saveInput = planID, input
-	return catalog.AdminPricingPlan{ID: planID, Code: input.Code, Name: input.Name, Status: "draft", Version: input.ExpectedVersion + 1, Features: input.Features}, nil
+	return catalog.AdminPricingPlan{ID: planID, Code: input.Code, Name: input.Name, Status: "draft", Version: input.ExpectedVersion + 1, Features: input.Features, RemoteAccessEnabled: input.RemoteAccessEnabled, DeviceLimit: input.DeviceLimit, MonthlyTrafficLimitGB: input.MonthlyTrafficLimitGB}, nil
 }
 
 func (f *fakeAdminPricingService) PublishPricingPlan(_ context.Context, planID uuid.UUID, input catalog.PricingPlanActionInput) (catalog.AdminPricingPlan, error) {
@@ -527,7 +527,7 @@ func TestAdminPricingRoutesRequireContentPermissionConfirmationAndDispatchVersio
 		CSRFTokenHash: csrfHash, AssuranceLevel: 2, AbsoluteExpiresAt: time.Now().Add(time.Hour),
 	}}
 	pricing := &fakeAdminPricingService{plans: []catalog.AdminPricingPlan{{
-		ID: planID, Code: "pro", Name: "Pro", Status: "published", Version: 3, Features: []string{"Fast"},
+		ID: planID, Code: "pro", Name: "Pro", Status: "published", Version: 3, Features: []string{"Fast"}, RemoteAccessEnabled: true, DeviceLimit: 10,
 	}}}
 	router := NewRouter(Dependencies{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Auth: authService, PricingAdmin: pricing,
@@ -541,11 +541,13 @@ func TestAdminPricingRoutesRequireContentPermissionConfirmationAndDispatchVersio
 	}
 
 	updateResponse := httptest.NewRecorder()
-	updateBody := `{"code":"pro","name":"Pro Plus","description":"Updated","priceMinor":12800,"originalPriceMinor":16800,"currency":"CNY","billingPeriod":"year","features":["Fast"],"sortOrder":20,"expectedVersion":3,"confirmPriceChange":true}`
+	updateBody := `{"code":"pro","name":"Pro Plus","description":"Updated","priceMinor":12800,"originalPriceMinor":16800,"currency":"CNY","billingPeriod":"year","features":["Fast"],"remoteAccessEnabled":true,"deviceLimit":24,"monthlyTrafficLimitGb":100,"sortOrder":20,"expectedVersion":3,"confirmPriceChange":true}`
 	router.ServeHTTP(updateResponse, adminRequest(http.MethodPut, "/api/v1/admin/pricing-plans/"+planID.String(), updateBody, csrfToken, csrfToken))
 	if updateResponse.Code != http.StatusOK || pricing.planID != planID || pricing.saveInput.ActorUserID != actorID ||
 		pricing.saveInput.ExpectedVersion != 3 || pricing.saveInput.OriginalPriceMinor == nil ||
-		*pricing.saveInput.OriginalPriceMinor != 16800 || !pricing.saveInput.ConfirmPriceChange {
+		*pricing.saveInput.OriginalPriceMinor != 16800 || !pricing.saveInput.ConfirmPriceChange ||
+		!pricing.saveInput.RemoteAccessEnabled || pricing.saveInput.DeviceLimit != 24 ||
+		pricing.saveInput.MonthlyTrafficLimitGB == nil || *pricing.saveInput.MonthlyTrafficLimitGB != 100 {
 		t.Fatalf("pricing update response = %d %s input=%+v", updateResponse.Code, updateResponse.Body.String(), pricing.saveInput)
 	}
 

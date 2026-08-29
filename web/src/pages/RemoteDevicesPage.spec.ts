@@ -68,6 +68,12 @@ const device = (overrides: Partial<RemoteDevice> = {}): RemoteDevice => ({
   lastSeenAt: '2026-08-08T00:00:00Z',
   lastSyncAt: '2026-08-08T00:00:00Z',
   remoteEnabledAt: '2026-08-08T00:00:00Z',
+  connectionMode: 'relay',
+  directModeEnabled: false,
+  directAvailable: false,
+  directTlsEnabled: false,
+  directIp: null,
+  directPort: null,
   ...overrides,
 })
 
@@ -232,6 +238,40 @@ describe('RemoteDevicesPage', () => {
     expect(wrapper.text()).toContain('设备名称已修改')
     expect(wrapper.text()).toContain('设计工作站')
 
+    wrapper.unmount()
+  })
+
+  it('enables direct mode after the Agent reports a live endpoint', async () => {
+    const available = device({
+      directAvailable: true,
+      directIp: '192.0.2.70',
+      directPort: 9443,
+    })
+    vi.mocked(listRemoteDevices).mockResolvedValue({
+      items: [available],
+      nextCursor: null,
+      observedAt: '2026-08-28T00:00:00Z',
+    })
+    vi.mocked(updateRemoteDevice).mockResolvedValue(
+      device({
+        ...available,
+        connectionMode: 'direct',
+        directModeEnabled: true,
+      }),
+    )
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await buttonWithText(wrapper, '修改设备').trigger('click')
+    const toggle = wrapper.get<HTMLInputElement>('.device-direct-toggle input')
+    expect(toggle.attributes('disabled')).toBeUndefined()
+    await toggle.setValue(true)
+    await wrapper.get('form.device-edit-dialog').trigger('submit')
+    await flushPromises()
+
+    expect(updateRemoteDevice).toHaveBeenCalledWith('device-1', '研发工作站', true)
+    expect(wrapper.text()).toContain('设备已切换为 IP 直连模式')
+    expect(wrapper.text()).toContain('IP 直连')
     wrapper.unmount()
   })
 

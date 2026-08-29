@@ -41,7 +41,8 @@ type accessRequest struct {
 }
 
 type updateDeviceRequest struct {
-	DeviceName string `json:"deviceName"`
+	DeviceName        string `json:"deviceName"`
+	DirectModeEnabled *bool  `json:"directModeEnabled,omitempty"`
 }
 
 type syncProjectRequest struct {
@@ -117,6 +118,7 @@ func registerRemoteControlRoutes(browserV1, deviceV1 *gin.RouterGroup, authServi
 		}
 		device, err := service.UpdateDevice(c.Request.Context(), remotecontrol.DeviceUpdateInput{
 			UserID: session.User.ID, DeviceID: deviceID, DeviceName: request.DeviceName,
+			DirectModeEnabled: request.DirectModeEnabled,
 		})
 		if writeRemoteControlProblem(c, err) {
 			return
@@ -495,6 +497,8 @@ func writeRemoteControlProblem(c *gin.Context, err error) bool {
 		writeProblem(c, http.StatusConflict, "remote_peer_required", "需要端到端加密连接", "请通过项目绑定的 Peer RPC 创建、重试或读取任务正文。")
 	case errors.Is(err, remotecontrol.ErrProtocolVersion):
 		writeProblem(c, http.StatusUpgradeRequired, "relay_protocol_version_invalid", "设备协议版本不兼容", "请升级目标设备 Agent 后重试。")
+	case errors.Is(err, remotecontrol.ErrDirectUnavailable):
+		writeProblem(c, http.StatusConflict, "remote_direct_unavailable", "设备直连入口不可用", "请先在 Device Agent 配置中开启直连 IP 和端口，并确认心跳在线。")
 	default:
 		writeProblem(c, http.StatusServiceUnavailable, "remote_control_unavailable", "远程控制暂不可用", "请稍后重试。")
 	}

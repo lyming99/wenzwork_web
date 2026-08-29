@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -23,6 +24,11 @@ type Store struct{ db *gorm.DB }
 // channel.  On a LAN it must fail fast rather than leaving the first screen
 // waiting behind a degraded control-plane dependency.
 const browserPeerIssueBudget = 750 * time.Millisecond
+
+// Direct presence is refreshed by the Agent every 15 seconds. Three missed
+// heartbeats fence a stale listener without coupling direct mode to Relay
+// route publication.
+const directPresenceTTL = 45 * time.Second
 
 func NewStore(db *gorm.DB) (*Store, error) {
 	if db == nil {
@@ -85,20 +91,27 @@ func NewService(config ServiceConfig) (*Service, error) {
 }
 
 type deviceRow struct {
-	DeviceID         uuid.UUID       `gorm:"column:device_id"`
-	UserID           uuid.UUID       `gorm:"column:user_id"`
-	DeviceName       string          `gorm:"column:device_name"`
-	Platform         string          `gorm:"column:platform"`
-	AgentVersion     string          `gorm:"column:agent_version"`
-	CredentialStatus string          `gorm:"column:credential_status"`
-	GrantStatus      *string         `gorm:"column:grant_status"`
-	Capabilities     json.RawMessage `gorm:"column:capabilities"`
-	Scopes           json.RawMessage `gorm:"column:scopes"`
-	GrantVersion     int64           `gorm:"column:grant_version"`
-	LastAllocationAt *time.Time      `gorm:"column:last_allocation_at"`
-	LastSyncAt       *time.Time      `gorm:"column:last_sync_at"`
-	RemoteEnabledAt  *time.Time      `gorm:"column:remote_enabled_at"`
-	UpdatedAt        time.Time       `gorm:"column:updated_at"`
+	DeviceID              uuid.UUID       `gorm:"column:device_id"`
+	UserID                uuid.UUID       `gorm:"column:user_id"`
+	DeviceName            string          `gorm:"column:device_name"`
+	Platform              string          `gorm:"column:platform"`
+	AgentVersion          string          `gorm:"column:agent_version"`
+	CredentialStatus      string          `gorm:"column:credential_status"`
+	GrantStatus           *string         `gorm:"column:grant_status"`
+	Capabilities          json.RawMessage `gorm:"column:capabilities"`
+	Scopes                json.RawMessage `gorm:"column:scopes"`
+	GrantVersion          int64           `gorm:"column:grant_version"`
+	LastAllocationAt      *time.Time      `gorm:"column:last_allocation_at"`
+	LastSyncAt            *time.Time      `gorm:"column:last_sync_at"`
+	RemoteEnabledAt       *time.Time      `gorm:"column:remote_enabled_at"`
+	DirectModeEnabled     bool            `gorm:"column:direct_mode_enabled"`
+	DirectEndpointEnabled bool            `gorm:"column:direct_endpoint_enabled"`
+	DirectTLSEnabled      bool            `gorm:"column:direct_tls_enabled"`
+	DirectIP              string          `gorm:"column:direct_ip"`
+	DirectPort            int64           `gorm:"column:direct_port"`
+	DirectConnectionEpoch int64           `gorm:"column:direct_connection_epoch"`
+	DirectLastSeenAt      *time.Time      `gorm:"column:direct_last_seen_at"`
+	UpdatedAt             time.Time       `gorm:"column:updated_at"`
 }
 
 func (service *Service) ListDevices(ctx context.Context, userID uuid.UUID, page PageRequest) (DevicePage, error) {
@@ -118,7 +131,10 @@ func (service *Service) ListDevices(ctx context.Context, userID uuid.UUID, page 
 		       credential.status AS credential_status, access_grant.status AS grant_status,
 		       credential.capabilities, COALESCE(access_grant.scopes, '[]'::jsonb) AS scopes,
 		       credential.grant_version, credential.last_allocation_at, sync.last_sync_at,
-		       access_grant.enabled_at AS remote_enabled_at, credential.updated_at
+		       access_grant.enabled_at AS remote_enabled_at,
+		       credential.direct_mode_enabled, credential.direct_endpoint_enabled, credential.direct_tls_enabled, credential.direct_ip,
+		       credential.direct_port, credential.direct_connection_epoch, credential.direct_last_seen_at,
+		       credential.updated_at
 		FROM remote_device_credentials credential
 		LEFT JOIN remote_access_grants access_grant ON access_grant.device_id = credential.device_id AND access_grant.user_id = credential.user_id
 		LEFT JOIN remote_device_sync_state sync ON sync.device_id = credential.device_id
@@ -159,7 +175,10 @@ func (service *Service) GetDevice(ctx context.Context, userID, deviceID uuid.UUI
 		       credential.status AS credential_status, access_grant.status AS grant_status,
 		       credential.capabilities, COALESCE(access_grant.scopes, '[]'::jsonb) AS scopes,
 		       credential.grant_version, credential.last_allocation_at, sync.last_sync_at,
-		       access_grant.enabled_at AS remote_enabled_at, credential.updated_at
+		       access_grant.enabled_at AS remote_enabled_at,
+		       credential.direct_mode_enabled, credential.direct_endpoint_enabled, credential.direct_tls_enabled, credential.direct_ip,
+		       credential.direct_port, credential.direct_connection_epoch, credential.direct_last_seen_at,
+		       credential.updated_at
 		FROM remote_device_credentials credential
 		LEFT JOIN remote_access_grants access_grant ON access_grant.device_id = credential.device_id AND access_grant.user_id = credential.user_id
 		LEFT JOIN remote_device_sync_state sync ON sync.device_id = credential.device_id
@@ -173,22 +192,52 @@ func (service *Service) GetDevice(ctx context.Context, userID, deviceID uuid.UUI
 	return service.deviceFromRow(row)
 }
 
-// UpdateDevice changes only the account-owned display name. Device identity,
-// platform and Agent version remain authoritative Agent projections.
+// UpdateDevice changes account-owned display and connection preferences.
+// Device identity, platform, Agent version and direct endpoint coordinates
+// remain authoritative Agent projections.
 func (service *Service) UpdateDevice(ctx context.Context, input DeviceUpdateInput) (Device, error) {
 	deviceName := strings.TrimSpace(input.DeviceName)
 	if input.UserID == uuid.Nil || input.DeviceID == uuid.Nil || !utf8.ValidString(deviceName) ||
 		deviceName == "" || utf8.RuneCountInString(deviceName) > 120 {
 		return Device{}, ErrInvalidInput
 	}
-	result := service.store.db.WithContext(ctx).Table("remote_device_credentials").
-		Where("user_id = ? AND device_id = ?", input.UserID, input.DeviceID).
-		Updates(map[string]any{"device_name": deviceName, "updated_at": service.now().UTC()})
-	if result.Error != nil {
-		return Device{}, fmt.Errorf("%w: update device: %v", ErrUnavailable, result.Error)
-	}
-	if result.RowsAffected != 1 {
-		return Device{}, ErrNotFound
+	now := service.now().UTC()
+	err := service.store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row struct {
+			DirectEndpointEnabled bool       `gorm:"column:direct_endpoint_enabled"`
+			DirectLastSeenAt      *time.Time `gorm:"column:direct_last_seen_at"`
+		}
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Table("remote_device_credentials").
+			Select("direct_endpoint_enabled, direct_last_seen_at").
+			Where("user_id = ? AND device_id = ?", input.UserID, input.DeviceID).Take(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if input.DirectModeEnabled != nil && *input.DirectModeEnabled &&
+			(!row.DirectEndpointEnabled || row.DirectLastSeenAt == nil || !row.DirectLastSeenAt.After(now.Add(-directPresenceTTL))) {
+			return ErrDirectUnavailable
+		}
+		updates := map[string]any{"device_name": deviceName, "updated_at": now}
+		if input.DirectModeEnabled != nil {
+			updates["direct_mode_enabled"] = *input.DirectModeEnabled
+		}
+		result := tx.Table("remote_device_credentials").Where("user_id = ? AND device_id = ?", input.UserID, input.DeviceID).Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, ErrNotFound) || errors.Is(err, ErrDirectUnavailable) {
+			return Device{}, err
+		}
+		return Device{}, fmt.Errorf("%w: update device: %v", ErrUnavailable, err)
 	}
 	return service.GetDevice(ctx, input.UserID, input.DeviceID)
 }
@@ -264,6 +313,20 @@ func (service *Service) deviceFromRow(row deviceRow) (Device, error) {
 	if json.Unmarshal(row.Capabilities, &capabilities) != nil || json.Unmarshal(row.Scopes, &scopes) != nil || row.GrantVersion < 1 {
 		return Device{}, ErrUnavailable
 	}
+	var directIP *string
+	var directPort *uint32
+	if row.DirectEndpointEnabled {
+		address, err := netip.ParseAddr(row.DirectIP)
+		if err != nil || address.IsUnspecified() || address.IsMulticast() || row.DirectPort < 1 || row.DirectPort > 65535 ||
+			row.DirectConnectionEpoch < 1 || row.DirectLastSeenAt == nil {
+			return Device{}, ErrUnavailable
+		}
+		canonical := address.Unmap().String()
+		port := uint32(row.DirectPort)
+		directIP, directPort = &canonical, &port
+	} else if row.DirectTLSEnabled || row.DirectIP != "" || row.DirectPort != 0 || row.DirectConnectionEpoch != 0 || row.DirectLastSeenAt != nil {
+		return Device{}, ErrUnavailable
+	}
 	status := "pending_approval"
 	if row.CredentialStatus == "quarantined" {
 		status = "quarantined"
@@ -273,20 +336,35 @@ func (service *Service) deviceFromRow(row deviceRow) (Device, error) {
 		status = "active"
 	}
 	presence, lastSeenAt := service.devicePresence(row)
+	connectionMode := "relay"
+	if row.DirectModeEnabled {
+		connectionMode = "direct"
+	}
 	return Device{
 		ID: row.DeviceID, InstallationDeviceID: row.DeviceID, DeviceName: row.DeviceName, Platform: row.Platform,
 		AgentVersion: row.AgentVersion, Status: status, Presence: presence, Capabilities: capabilities, Scopes: scopes,
 		GrantVersion: uint64(row.GrantVersion), LastSeenAt: lastSeenAt, LastSyncAt: utcPointer(row.LastSyncAt),
-		RemoteEnabledAt: utcPointer(row.RemoteEnabledAt), UpdatedAt: row.UpdatedAt.UTC(),
+		RemoteEnabledAt: utcPointer(row.RemoteEnabledAt), ConnectionMode: connectionMode,
+		DirectModeEnabled: row.DirectModeEnabled, DirectAvailable: service.directEndpointAvailable(row), DirectTLSEnabled: row.DirectTLSEnabled,
+		DirectIP: directIP, DirectPort: directPort, UpdatedAt: row.UpdatedAt.UTC(),
 	}, nil
 }
 
 func (service *Service) devicePresence(row deviceRow) (string, *time.Time) {
 	// Preserve the most recent allocation as historical context when the
 	// device is offline, but only a live Relay route may mark it online.
-	lastSeenAt := utcPointer(row.LastAllocationAt)
+	lastSeenAt := latestTimePointer(row.LastAllocationAt, row.DirectLastSeenAt)
 	if service.routeResolver == nil || row.DeviceID == uuid.Nil || row.UserID == uuid.Nil || row.CredentialStatus != "active" ||
 		row.GrantStatus == nil || *row.GrantStatus != "enabled" {
+		if row.DirectModeEnabled && service.directEndpointAvailable(row) && row.CredentialStatus == "active" && row.GrantStatus != nil && *row.GrantStatus == "enabled" {
+			return "online", lastSeenAt
+		}
+		return "offline", lastSeenAt
+	}
+	if row.DirectModeEnabled {
+		if row.CredentialStatus == "active" && row.GrantStatus != nil && *row.GrantStatus == "enabled" && service.directEndpointAvailable(row) {
+			return "online", lastSeenAt
+		}
 		return "offline", lastSeenAt
 	}
 	now := service.now().UTC()
@@ -296,6 +374,22 @@ func (service *Service) devicePresence(row deviceRow) (string, *time.Time) {
 		return "offline", lastSeenAt
 	}
 	return "online", utcPointer(&route.LastHeartbeatAt)
+}
+
+func (service *Service) directEndpointAvailable(row deviceRow) bool {
+	return row.DirectEndpointEnabled && row.DirectLastSeenAt != nil && row.DirectLastSeenAt.After(service.now().UTC().Add(-directPresenceTTL))
+}
+
+func latestTimePointer(values ...*time.Time) *time.Time {
+	var latest *time.Time
+	for _, value := range values {
+		if value == nil || latest != nil && !value.After(*latest) {
+			continue
+		}
+		copy := value.UTC()
+		latest = &copy
+	}
+	return latest
 }
 
 type credentialLockRow struct {

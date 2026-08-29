@@ -140,9 +140,18 @@ func runServeContext(ctx context.Context, arguments []string, stderr io.Writer) 
 	controlRaw := flags.String("control-url", "", "Control Plane base URL")
 	accessKey := flags.String("access-key", "", "initial DeviceKey (or WENZWORK_DEVICE_ACCESS_KEY; never logged or persisted)")
 	tlsCAFile := flags.String("tls-ca-file", "", "additional trusted CA PEM file")
+	directEnabled := flags.String("direct-enabled", "", "enable direct WebSocket connections (true or false)")
+	directAccessKey := flags.String("direct-access-key", "", "optional Access Key for native direct authorization")
+	directIP := flags.String("direct-ip", "", "IP address advertised and bound by direct mode")
+	directPort := flags.String("direct-port", "", "TCP port advertised and bound by direct mode")
+	directTLSCertFile := flags.String("direct-tls-cert-file", "", "optional TLS certificate PEM for direct WSS")
+	directTLSKeyFile := flags.String("direct-tls-key-file", "", "optional TLS private key PEM for direct WSS")
 	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 {
 		return errors.New("invalid serve options")
 	}
+	// Capture the environment supplied by the host before godotenv adds the
+	// Device Access Key and other Agent-only configuration to this process.
+	terminalHostEnvironment := os.Environ()
 	if err := loadAgentEnvironment(*envFile); err != nil {
 		return err
 	}
@@ -161,6 +170,7 @@ func runServeContext(ctx context.Context, arguments []string, stderr io.Writer) 
 		return err
 	}
 	defer state.close()
+	state.setTerminalHostEnvironment(terminalHostEnvironment)
 	protocolLog := slog.New(slog.NewJSONHandler(stderr, nil))
 	state.protocolDiagnosticSink = func(diagnostic deviceProtocolDiagnostic) {
 		protocolLog.Warn("remote protocol failure",
@@ -197,14 +207,30 @@ func runServeContext(ctx context.Context, arguments []string, stderr io.Writer) 
 	if key != "" && !validDeviceKey(key) {
 		return errors.New("--access-key or WENZWORK_DEVICE_ACCESS_KEY is invalid")
 	}
+	direct, err := parseDirectV2Config(
+		valueOrEnvironment(*directEnabled, "WENZWORK_DEVICE_DIRECT_ENABLED"),
+		valueOrEnvironment(*directIP, "WENZWORK_DEVICE_DIRECT_IP"),
+		valueOrEnvironment(*directPort, "WENZWORK_DEVICE_DIRECT_PORT"),
+		valueOrEnvironment(*directTLSCertFile, "WENZWORK_DEVICE_DIRECT_TLS_CERT_FILE"),
+		valueOrEnvironment(*directTLSKeyFile, "WENZWORK_DEVICE_DIRECT_TLS_KEY_FILE"),
+	)
+	if err != nil {
+		return err
+	}
+	localDirectKey, err := selectDirectV2AccessKey(direct.Enabled, valueOrEnvironment(*directAccessKey, "WENZWORK_DEVICE_DIRECT_ACCESS_KEY"), key)
+	if err != nil {
+		return errors.New("--direct-access-key or WENZWORK_DEVICE_DIRECT_ACCESS_KEY is invalid")
+	}
 	if err := state.startTaskEngine(); err != nil {
 		return fmt.Errorf("start task engine: %w", err)
 	}
 	return runTarget(ctx, targetConfig{
-		controlURL: controlURL,
-		accessKey:  key,
-		tlsCAFile:  valueOrEnvironment(*tlsCAFile, "WENZWORK_DEVICE_TLS_CA_FILE"),
-		state:      state,
+		controlURL:      controlURL,
+		accessKey:       key,
+		directAccessKey: localDirectKey,
+		tlsCAFile:       valueOrEnvironment(*tlsCAFile, "WENZWORK_DEVICE_TLS_CA_FILE"),
+		direct:          direct,
+		state:           state,
 	})
 }
 

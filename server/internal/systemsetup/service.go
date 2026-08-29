@@ -16,7 +16,7 @@ import (
 	"github.com/wenzwork/wenzwork-web/server/internal/auth"
 	"github.com/wenzwork/wenzwork-web/server/internal/config"
 	"github.com/wenzwork/wenzwork-web/server/internal/database"
-	"github.com/wenzwork/wenzwork-web/server/internal/mailer"
+	"github.com/wenzwork/wenzwork-web/server/internal/emailsettings"
 )
 
 var (
@@ -24,7 +24,6 @@ var (
 	ErrInvalid                = errors.New("system setup configuration is invalid")
 	ErrRedisUnavailable       = errors.New("configured Redis is unavailable")
 	ErrDatabaseUnavailable    = errors.New("configured database is unavailable")
-	ErrSMTPUnavailable        = errors.New("configured SMTP delivery is unavailable")
 	ErrAdministratorBootstrap = errors.New("administrator could not be initialized")
 	ErrEnvironmentWrite       = errors.New("system environment could not be saved")
 )
@@ -37,6 +36,7 @@ type Settings struct {
 	SMTPHost                string   `json:"smtpHost"`
 	SMTPPort                int      `json:"smtpPort"`
 	SMTPUser                string   `json:"smtpUser"`
+	SMTPConfigured          bool     `json:"smtpConfigured"`
 	SMTPPasswordConfigured  bool     `json:"smtpPasswordConfigured"`
 	MailFrom                string   `json:"mailFrom"`
 	CookieSecure            bool     `json:"cookieSecure"`
@@ -140,17 +140,6 @@ func (service *Service) Apply(ctx context.Context, input ApplyInput) (ApplyResul
 	if err := pingRedis(ctx, candidate.RedisURL); err != nil {
 		return ApplyResult{}, fmt.Errorf("%w: %v", ErrRedisUnavailable, err)
 	}
-	sender, err := mailer.NewSMTPSender(mailer.SMTPConfig{
-		Host: candidate.SMTPHost, Port: candidate.SMTPPort, Username: candidate.SMTPUser,
-		Password: smtpPassword, From: candidate.MailFrom,
-		RequireTLS: candidate.Environment == "production", Timeout: 10 * time.Second,
-	})
-	if err != nil {
-		return ApplyResult{}, fmt.Errorf("%w: SMTP: %v", ErrInvalid, err)
-	}
-	if err := sendAdministratorTestEmail(ctx, sender, service.administratorEmail); err != nil {
-		return ApplyResult{}, fmt.Errorf("%w: %v", ErrSMTPUnavailable, err)
-	}
 	if err := database.Migrate(ctx, candidate.DatabaseURL, candidate.MigrationsDir); err != nil {
 		return ApplyResult{}, fmt.Errorf("%w: %v", ErrDatabaseUnavailable, err)
 	}
@@ -163,13 +152,24 @@ func (service *Service) Apply(ctx context.Context, input ApplyInput) (ApplyResul
 		return ApplyResult{}, fmt.Errorf("%w: %v", ErrDatabaseUnavailable, err)
 	}
 	defer sqlDatabase.Close()
-	_, err = auth.BootstrapSuperAdmin(ctx, targetDatabase, service.administratorEmail, service.administratorPassword,
+	bootstrap, err := auth.BootstrapSuperAdmin(ctx, targetDatabase, service.administratorEmail, service.administratorPassword,
 		service.administratorDisplayName, auth.Argon2Params{
 			MemoryKiB: candidate.Argon2MemoryKiB, Iterations: candidate.Argon2Iterations,
 			Parallelism: candidate.Argon2Parallelism, SaltLength: 16, KeyLength: 32,
 		})
 	if err != nil {
 		return ApplyResult{}, fmt.Errorf("%w: %v", ErrAdministratorBootstrap, err)
+	}
+	mailSettings, err := emailsettings.NewStore(targetDatabase, emailsettings.Config{
+		Host: candidate.SMTPHost, Port: candidate.SMTPPort, Username: candidate.SMTPUser,
+		Password: smtpPassword, From: candidate.MailFrom,
+		RequireTLS: candidate.Environment == "production", Timeout: 10 * time.Second,
+	}, candidate.MFAEncryptionKey)
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("%w: system email settings: %v", ErrDatabaseUnavailable, err)
+	}
+	if err := mailSettings.EnsureDatabaseOverride(ctx, bootstrap.User.ID); err != nil {
+		return ApplyResult{}, fmt.Errorf("%w: system email settings: %v", ErrDatabaseUnavailable, err)
 	}
 
 	updates := map[string]string{
@@ -203,18 +203,6 @@ func (service *Service) Apply(ctx context.Context, input ApplyInput) (ApplyResul
 	service.administratorPassword = ""
 	_ = os.Unsetenv("SYSTEM_ADMIN_PASSWORD")
 	return ApplyResult{Settings: completed, RestartRequired: true}, nil
-}
-
-func sendAdministratorTestEmail(ctx context.Context, sender mailer.Sender, administratorEmail string) error {
-	if sender == nil {
-		return errors.New("SMTP sender is unavailable")
-	}
-	return sender.Send(ctx, mailer.Message{
-		To:      strings.TrimSpace(administratorEmail),
-		Subject: "WenzWork system setup email test",
-		Text: "WenzWork successfully delivered this administrator test email. " +
-			"The first-deployment setup can continue after the remaining checks pass.\n",
-	})
 }
 
 func (service *Service) candidate(input ApplyInput) (config.Config, string, error) {
@@ -288,6 +276,7 @@ func settingsFromConfig(current config.Config, required bool) Settings {
 		Required: required, PublicBaseURL: current.PublicBaseURL,
 		DatabaseURL: current.DatabaseURL, RedisURL: current.RedisURL,
 		SMTPHost: current.SMTPHost, SMTPPort: current.SMTPPort, SMTPUser: current.SMTPUser,
+		SMTPConfigured:         strings.TrimSpace(current.SMTPHost) != "" && strings.TrimSpace(current.MailFrom) != "",
 		SMTPPasswordConfigured: current.SMTPPassword != "", MailFrom: current.MailFrom,
 		CookieSecure:            current.CookieSecure,
 		AdminMFARequired:        current.AdminMFARequired,

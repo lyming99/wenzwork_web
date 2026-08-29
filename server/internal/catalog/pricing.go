@@ -30,6 +30,11 @@ var (
 	pricingCurrencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
 )
 
+const (
+	maximumPricingDeviceLimit      = 100000
+	maximumMonthlyTrafficLimitInGB = 1000000
+)
+
 type AdminPricingPlan struct {
 	ID                    uuid.UUID  `json:"id"`
 	Code                  string     `json:"code"`
@@ -40,6 +45,9 @@ type AdminPricingPlan struct {
 	Currency              string     `json:"currency"`
 	BillingPeriod         string     `json:"billingPeriod"`
 	Features              []string   `json:"features"`
+	RemoteAccessEnabled   bool       `json:"remoteAccessEnabled"`
+	DeviceLimit           int        `json:"deviceLimit"`
+	MonthlyTrafficLimitGB *int64     `json:"monthlyTrafficLimitGb"`
 	Status                string     `json:"status"`
 	SortOrder             int        `json:"sortOrder"`
 	Version               int64      `json:"version"`
@@ -51,18 +59,21 @@ type AdminPricingPlan struct {
 }
 
 type SavePricingPlanInput struct {
-	Code               string
-	Name               string
-	Description        string
-	PriceMinor         *int64
-	OriginalPriceMinor *int64
-	Currency           string
-	BillingPeriod      string
-	Features           []string
-	SortOrder          int
-	ExpectedVersion    int64
-	ConfirmPriceChange bool
-	ActorUserID        uuid.UUID
+	Code                  string
+	Name                  string
+	Description           string
+	PriceMinor            *int64
+	OriginalPriceMinor    *int64
+	Currency              string
+	BillingPeriod         string
+	Features              []string
+	RemoteAccessEnabled   bool
+	DeviceLimit           int
+	MonthlyTrafficLimitGB *int64
+	SortOrder             int
+	ExpectedVersion       int64
+	ConfirmPriceChange    bool
+	ActorUserID           uuid.UUID
 }
 
 type PricingPlanActionInput struct {
@@ -72,23 +83,26 @@ type PricingPlanActionInput struct {
 }
 
 type pricingPlanVersionRow struct {
-	ID                 uuid.UUID       `gorm:"column:id;type:uuid;primaryKey"`
-	PricingPlanID      uuid.UUID       `gorm:"column:pricing_plan_id;type:uuid"`
-	Version            int64           `gorm:"column:version"`
-	Code               string          `gorm:"column:code"`
-	Name               string          `gorm:"column:name"`
-	Description        string          `gorm:"column:description"`
-	PriceMinor         *int64          `gorm:"column:price_minor"`
-	OriginalPriceMinor *int64          `gorm:"column:original_price_minor"`
-	Currency           string          `gorm:"column:currency"`
-	BillingPeriod      string          `gorm:"column:billing_period"`
-	FeaturesJSON       json.RawMessage `gorm:"column:features_json;type:jsonb"`
-	Status             string          `gorm:"column:status"`
-	SortOrder          int             `gorm:"column:sort_order"`
-	PublishedAt        *time.Time      `gorm:"column:published_at"`
-	ChangeType         string          `gorm:"column:change_type"`
-	ChangedBy          *uuid.UUID      `gorm:"column:changed_by;type:uuid"`
-	CreatedAt          time.Time       `gorm:"column:created_at"`
+	ID                    uuid.UUID       `gorm:"column:id;type:uuid;primaryKey"`
+	PricingPlanID         uuid.UUID       `gorm:"column:pricing_plan_id;type:uuid"`
+	Version               int64           `gorm:"column:version"`
+	Code                  string          `gorm:"column:code"`
+	Name                  string          `gorm:"column:name"`
+	Description           string          `gorm:"column:description"`
+	PriceMinor            *int64          `gorm:"column:price_minor"`
+	OriginalPriceMinor    *int64          `gorm:"column:original_price_minor"`
+	Currency              string          `gorm:"column:currency"`
+	BillingPeriod         string          `gorm:"column:billing_period"`
+	FeaturesJSON          json.RawMessage `gorm:"column:features_json;type:jsonb"`
+	RemoteAccessEnabled   bool            `gorm:"column:remote_access_enabled"`
+	DeviceLimit           int             `gorm:"column:device_limit"`
+	MonthlyTrafficLimitGB *int64          `gorm:"column:monthly_traffic_limit_gb"`
+	Status                string          `gorm:"column:status"`
+	SortOrder             int             `gorm:"column:sort_order"`
+	PublishedAt           *time.Time      `gorm:"column:published_at"`
+	ChangeType            string          `gorm:"column:change_type"`
+	ChangedBy             *uuid.UUID      `gorm:"column:changed_by;type:uuid"`
+	CreatedAt             time.Time       `gorm:"column:created_at"`
 }
 
 func (pricingPlanVersionRow) TableName() string { return "pricing_plan_versions" }
@@ -120,7 +134,9 @@ func (s *Store) CreatePricingPlan(ctx context.Context, input SavePricingPlanInpu
 		ID: uuid.New(), Code: input.Code, Name: input.Name, Description: input.Description,
 		PriceMinor: input.PriceMinor, OriginalPriceMinor: input.OriginalPriceMinor,
 		Currency: input.Currency, BillingPeriod: input.BillingPeriod,
-		FeaturesJSON: featuresJSON, Status: "draft", SortOrder: input.SortOrder, Version: 1,
+		FeaturesJSON: featuresJSON, RemoteAccessEnabled: input.RemoteAccessEnabled,
+		DeviceLimit: input.DeviceLimit, MonthlyTrafficLimitGB: input.MonthlyTrafficLimitGB,
+		Status: "draft", SortOrder: input.SortOrder, Version: 1,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	result, _ := adminPricingPlanFromRow(row)
@@ -180,6 +196,8 @@ func (s *Store) UpdatePricingPlan(ctx context.Context, planID uuid.UUID, input S
 		row.PriceMinor, row.OriginalPriceMinor = input.PriceMinor, input.OriginalPriceMinor
 		row.Currency, row.BillingPeriod = input.Currency, input.BillingPeriod
 		row.FeaturesJSON, row.SortOrder = featuresJSON, input.SortOrder
+		row.RemoteAccessEnabled, row.DeviceLimit = input.RemoteAccessEnabled, input.DeviceLimit
+		row.MonthlyTrafficLimitGB = input.MonthlyTrafficLimitGB
 		row.Version++
 		row.UpdatedAt = now
 		if err := tx.Save(&row).Error; err != nil {
@@ -327,6 +345,8 @@ func validatePricingPlanInput(input SavePricingPlanInput, requireVersion bool) (
 		!validBillingPeriod(input.BillingPeriod) || input.SortOrder < -100000 || input.SortOrder > 100000 ||
 		(input.PriceMinor != nil && *input.PriceMinor < 0) ||
 		(input.OriginalPriceMinor != nil && (input.PriceMinor == nil || *input.OriginalPriceMinor <= *input.PriceMinor)) ||
+		input.DeviceLimit < 1 || input.DeviceLimit > maximumPricingDeviceLimit ||
+		(input.MonthlyTrafficLimitGB != nil && (*input.MonthlyTrafficLimitGB < 1 || *input.MonthlyTrafficLimitGB > maximumMonthlyTrafficLimitInGB)) ||
 		len(input.Features) > 30 ||
 		(requireVersion && input.ExpectedVersion < 1) {
 		return SavePricingPlanInput{}, ErrPricingPlanInvalid
@@ -397,7 +417,9 @@ func adminPricingPlanFromRow(row pricingPlanRow) (AdminPricingPlan, error) {
 		ID: row.ID, Code: row.Code, Name: row.Name, Description: row.Description,
 		PriceMinor: row.PriceMinor, OriginalPriceMinor: row.OriginalPriceMinor,
 		Currency: row.Currency, BillingPeriod: row.BillingPeriod,
-		Features: features, Status: row.Status, SortOrder: row.SortOrder, Version: row.Version,
+		Features: features, RemoteAccessEnabled: row.RemoteAccessEnabled, DeviceLimit: row.DeviceLimit,
+		MonthlyTrafficLimitGB: row.MonthlyTrafficLimitGB,
+		Status:                row.Status, SortOrder: row.SortOrder, Version: row.Version,
 		PublishedVersion:      row.PublishedVersion,
 		HasUnpublishedChanges: row.PublishedVersion == nil || *row.PublishedVersion != row.Version,
 		PublishedAt:           publishedAt, CreatedAt: row.CreatedAt.UTC(), UpdatedAt: row.UpdatedAt.UTC(),
@@ -408,8 +430,9 @@ func appendPricingPlanVersion(tx *gorm.DB, row pricingPlanRow, changeType string
 	if err := tx.Create(&pricingPlanVersionRow{
 		ID: uuid.New(), PricingPlanID: row.ID, Version: row.Version, Code: row.Code, Name: row.Name,
 		Description: row.Description, PriceMinor: row.PriceMinor, OriginalPriceMinor: row.OriginalPriceMinor,
-		Currency:      row.Currency,
-		BillingPeriod: row.BillingPeriod, FeaturesJSON: row.FeaturesJSON, Status: row.Status,
+		Currency: row.Currency, BillingPeriod: row.BillingPeriod, FeaturesJSON: row.FeaturesJSON,
+		RemoteAccessEnabled: row.RemoteAccessEnabled, DeviceLimit: row.DeviceLimit,
+		MonthlyTrafficLimitGB: row.MonthlyTrafficLimitGB, Status: row.Status,
 		SortOrder: row.SortOrder, PublishedAt: row.PublishedAt, ChangeType: changeType,
 		ChangedBy: &actor, CreatedAt: now,
 	}).Error; err != nil {

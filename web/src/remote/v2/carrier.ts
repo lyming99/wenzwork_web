@@ -182,12 +182,12 @@ export const validateV2CarrierEndpoint = (
     endpoint.search ||
     endpoint.hash
   ) {
-    throw new Error('remote/v2 Relay 地址必须是无凭据的 ws(s)://…/v2/connect。')
+    throw new Error('remote/v2 连接地址必须是无凭据的 ws(s)://…/v2/connect。')
   }
   // Browsers reject this as mixed content anyway, but fail before placing a
   // WebSocket attempt so the operator gets an actionable configuration error.
   if (pageProtocol === 'https:' && endpoint.protocol === 'ws:') {
-    throw new Error('HTTPS 页面不能连接 ws:// Relay；请为远程连接配置 wss:// 地址。')
+    throw new Error('HTTPS 页面不能连接 ws:// 设备；请为远程连接配置受信任的 wss:// 地址。')
   }
 }
 
@@ -272,7 +272,7 @@ export class V2Carrier {
     epoch: bigint
     signal?: AbortSignal
   }): Promise<V2Carrier> {
-    const endpoint = new URL(input.issued.link.relayUrl)
+    const endpoint = new URL(input.issued.link.connectionUrl || input.issued.link.relayUrl)
     validateV2CarrierEndpoint(endpoint)
     const id = crypto.randomUUID()
     const epoch = input.epoch

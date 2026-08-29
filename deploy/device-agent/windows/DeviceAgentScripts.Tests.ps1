@@ -57,12 +57,16 @@ try {
     [IO.File]::WriteAllLines($environment, @(
         'WENZWORK_CONTROL_URL=http://control.example.test:8080',
         "WENZWORK_DEVICE_ACCESS_KEY=$accessKey",
+        "WENZWORK_DEVICE_DIRECT_ACCESS_KEY=$accessKey",
         "WENZWORK_DEVICE_STATE_FILE=$statePath",
         "WENZWORK_DEVICE_WORKSPACE=$(Join-Path $dataRoot 'workspace')",
         'WENZWORK_AGENT_SECRET_STORE=native'
     ))
     $values = Assert-AgentEnvironmentFile -Path $environment -ExpectedStatePath $statePath
     Assert-True ($values.WENZWORK_AGENT_SECRET_STORE -eq 'native') 'native DPAPI SecretStore was rejected'
+    $invalidDirectEnvironment = Join-Path $testRoot 'invalid-direct.env'
+    (Get-Content -LiteralPath $environment) -replace '^WENZWORK_DEVICE_DIRECT_ACCESS_KEY=.*$', 'WENZWORK_DEVICE_DIRECT_ACCESS_KEY=invalid' | Set-Content -LiteralPath $invalidDirectEnvironment
+    Assert-Throws { Assert-AgentEnvironmentFile -Path $invalidDirectEnvironment -ExpectedStatePath $statePath } 'invalid direct Access Key'
     Add-Content -LiteralPath $environment -Value 'UNSAFE_KEY=value'
     Assert-Throws { Assert-AgentEnvironmentFile -Path $environment -ExpectedStatePath $statePath } 'unknown environment key'
 

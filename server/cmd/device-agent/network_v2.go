@@ -142,16 +142,17 @@ func decodeV2TrustKey(encoded string) (ed25519.PublicKey, error) {
 // are allocated by that writer after priority selection, so a control frame
 // cannot overtake a bulk frame while retaining the bulk frame's old sequence.
 type v2AgentCarrier struct {
-	socket               *websocket.Conn
-	id                   string
-	epoch                uint64
-	packetMu             sync.Mutex
-	nextOut              uint64
-	lastIn               uint64
-	lastPeerAcknowledged uint64
-	lastAckProgress      atomic.Int64
-	writer               *v2AgentWriter
-	closeOnce            sync.Once
+	socket                *websocket.Conn
+	id                    string
+	epoch                 uint64
+	targetConnectionEpoch uint64
+	packetMu              sync.Mutex
+	nextOut               uint64
+	lastIn                uint64
+	lastPeerAcknowledged  uint64
+	lastAckProgress       atomic.Int64
+	writer                *v2AgentWriter
+	closeOnce             sync.Once
 }
 
 type v2AgentPriority uint8
@@ -198,7 +199,7 @@ func newV2AgentCarrier(socket *websocket.Conn, id string, epoch uint64) (*v2Agen
 	if socket == nil || uuid.Validate(id) != nil || epoch == 0 {
 		return nil, errV2AgentCarrier
 	}
-	carrier := &v2AgentCarrier{socket: socket, id: id, epoch: epoch}
+	carrier := &v2AgentCarrier{socket: socket, id: id, epoch: epoch, targetConnectionEpoch: epoch}
 	carrier.lastAckProgress.Store(v2AgentMonotonicNanos())
 	carrier.writer = &v2AgentWriter{
 		carrier: carrier, queues: make(map[v2AgentPriority][]*v2AgentWriteRequest), bytes: make(map[v2AgentPriority]int), frames: make(map[v2AgentPriority]int),
@@ -423,6 +424,110 @@ func v2AgentQueueByteLimit(priority v2AgentPriority) int {
 		return v2AgentInteractiveBytes
 	default:
 		return v2AgentBulkQueueBytes
+	}
+}
+
+type hostV2RouteTransition struct {
+	direct bool
+	done   chan error
+}
+
+// hostV2RouteCoordinator fences Host-issued traffic to exactly one physical
+// route. Local Access-Key direct links are owned by a separate listener realm
+// and deliberately do not participate in these transitions.
+type hostV2RouteCoordinator struct {
+	transitions   chan hostV2RouteTransition
+	initialDirect bool
+}
+
+func newHostV2RouteCoordinator(initialDirect bool) *hostV2RouteCoordinator {
+	return &hostV2RouteCoordinator{transitions: make(chan hostV2RouteTransition), initialDirect: initialDirect}
+}
+
+func (coordinator *hostV2RouteCoordinator) setDirect(ctx context.Context, direct bool) error {
+	if coordinator == nil || ctx == nil {
+		return errV2AgentCarrier
+	}
+	transition := hostV2RouteTransition{direct: direct, done: make(chan error, 1)}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case coordinator.transitions <- transition:
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-transition.done:
+		return err
+	}
+}
+
+func (coordinator *hostV2RouteCoordinator) run(ctx context.Context, relay func(context.Context) error) error {
+	if coordinator == nil || ctx == nil || relay == nil {
+		return errV2AgentCarrier
+	}
+	direct := coordinator.initialDirect
+	var relayCancel context.CancelFunc
+	var relayResult chan error
+	startRelay := func() {
+		relayContext, cancel := context.WithCancel(ctx)
+		result := make(chan error, 1)
+		relayCancel, relayResult = cancel, result
+		go func() { result <- relay(relayContext) }()
+	}
+	stopRelay := func() error {
+		if relayCancel == nil || relayResult == nil {
+			return nil
+		}
+		relayCancel()
+		select {
+		case <-ctx.Done():
+			relayCancel, relayResult = nil, nil
+			return ctx.Err()
+		case err := <-relayResult:
+			relayCancel, relayResult = nil, nil
+			if errors.Is(err, context.Canceled) {
+				return nil
+			}
+			if err == nil {
+				return errV2AgentCarrier
+			}
+			return err
+		}
+	}
+	if !direct {
+		startRelay()
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			_ = stopRelay()
+			return ctx.Err()
+		case err := <-relayResult:
+			relayCancel, relayResult = nil, nil
+			if err == nil {
+				return errV2AgentCarrier
+			}
+			return err
+		case transition := <-coordinator.transitions:
+			if transition.direct == direct {
+				transition.done <- nil
+				continue
+			}
+			if transition.direct {
+				err := stopRelay()
+				if err != nil {
+					transition.done <- err
+					return err
+				}
+				direct = true
+				transition.done <- nil
+				continue
+			}
+			direct = false
+			startRelay()
+			transition.done <- nil
+		}
 	}
 }
 
@@ -689,11 +794,19 @@ type v2AgentLinkRegistry struct {
 }
 
 func newV2AgentLinkRegistry(state *agentState) *v2AgentLinkRegistry {
+	return newV2AgentLinkRegistryWithProjection(state, true)
+}
+
+func newDetachedV2AgentLinkRegistry(state *agentState) *v2AgentLinkRegistry {
+	return newV2AgentLinkRegistryWithProjection(state, false)
+}
+
+func newV2AgentLinkRegistryWithProjection(state *agentState, projectDiagnostics bool) *v2AgentLinkRegistry {
 	registry := &v2AgentLinkRegistry{
 		state: state, links: make(map[string]*v2AgentLink),
 		rpcInFlightByLink: make(map[string]int), rpcInFlightByController: make(map[string]int),
 	}
-	if state != nil {
+	if state != nil && projectDiagnostics {
 		state.servicesMu.Lock()
 		state.v2Links = registry
 		state.servicesMu.Unlock()
@@ -1174,7 +1287,7 @@ func newV2AgentLink(registry *v2AgentLinkRegistry, carrier *v2AgentCarrier, veri
 	}
 	claims, err := verifier.Verify(init.GetDeviceConnectionGrant(), now)
 	initExpiry := init.GetExpiresAt().AsTime()
-	epochMatches := v2DeviceLinkGrantMatchesCarrierEpoch(claims, carrier.epoch)
+	epochMatches := v2DeviceLinkGrantMatchesCarrierEpoch(claims, carrier.targetConnectionEpoch)
 	if err != nil || claims.GrantID != init.GetGrantId() || claims.ClientID != init.GetClientId() || claims.DeviceID != state.DeviceID.String() ||
 		claims.RelayNodeID != init.GetRelayNodeId() || claims.RelayCellID != init.GetRelayCellId() ||
 		claims.TargetConnectionEpoch != init.GetTargetConnectionEpoch() || !epochMatches ||
@@ -1363,6 +1476,14 @@ func zeroV2Bytes(value []byte) {
 // socket failure returns to the allocation loop, which rebinds the registry to
 // the next Carrier without discarding healthy Link keys, Channels or Streams.
 func serveTargetV2(ctx context.Context, carrier *v2AgentCarrier, heartbeat time.Duration, links *v2AgentLinkRegistry, verifier remoteauth.DeviceLinkGrantVerifier) error {
+	return serveTargetV2WithOptions(ctx, carrier, heartbeat, links, verifier, false)
+}
+
+// serveTargetV2WithOptions serves an Agent-side target Carrier. Relay mode
+// receives the physical heartbeat probe from the Relay server, while direct
+// mode has no intermediary and must originate the same probe itself so the
+// browser-side Carrier watchdog observes periodic Ping/Pong activity.
+func serveTargetV2WithOptions(ctx context.Context, carrier *v2AgentCarrier, heartbeat time.Duration, links *v2AgentLinkRegistry, verifier remoteauth.DeviceLinkGrantVerifier, probePeer bool) error {
 	if ctx == nil || carrier == nil || links == nil || verifier.Issuer == "" || len(verifier.Keys) == 0 {
 		return errV2AgentCarrier
 	}
@@ -1419,6 +1540,30 @@ func serveTargetV2(ctx context.Context, carrier *v2AgentCarrier, heartbeat time.
 			}
 		}
 	}()
+	probeContext, cancelProbes := context.WithCancel(serveContext)
+	defer cancelProbes()
+	if probePeer {
+		// Probe at half the negotiated interval. The browser allows roughly two
+		// intervals plus a small grace period before declaring the Carrier dead,
+		// leaving room for a delayed Pong on a busy direct link.
+		probeInterval := max(time.Second, heartbeat/2)
+		go func() {
+			ticker := time.NewTicker(probeInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-probeContext.Done():
+					return
+				case <-ticker.C:
+					probe := uint64(v2AgentMonotonicNanos() / int64(time.Millisecond))
+					if err := carrier.send(probeContext, &remotev2.CarrierEnvelope{Body: &remotev2.CarrierEnvelope_Ping{Ping: &remotev2.CarrierPing{MonotonicMillis: probe}}}, v2AgentControl); err != nil {
+						reportFatal(err)
+						return
+					}
+				}
+			}
+		}()
+	}
 
 	for {
 		envelope, err := readV2AgentEnvelope(serveContext, carrier.socket)
@@ -1439,8 +1584,8 @@ func serveTargetV2(ctx context.Context, carrier *v2AgentCarrier, heartbeat time.
 				return err
 			}
 		case envelope.GetPong() != nil:
-			// Relay is the only periodic prober. Tolerate a valid sequenced Pong
-			// for wire compatibility; lastInbound already records its liveness.
+			// A direct Agent may originate the probe, while Relay mode receives
+			// probes from the Relay. In either case lastInbound records liveness.
 			continue
 		case envelope.GetStreamRejected() != nil:
 			if err := links.handleStreamRejected(envelope.GetStreamRejected()); err != nil {

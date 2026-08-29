@@ -76,6 +76,7 @@ $startParameters = @{
     WorkingDirectory = $root
     RedirectStandardOutput = $logFile
     RedirectStandardError = $errorLog
+    WindowStyle = 'Hidden'
     PassThru = $true
 }
 if ($serviceArguments.Count -gt 0) { $startParameters.ArgumentList = $serviceArguments }

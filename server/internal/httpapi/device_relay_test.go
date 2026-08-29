@@ -26,6 +26,14 @@ type remoteDeviceServiceStub struct {
 	bootstrapInput  deviceaccesskey.BootstrapInput
 	bootstrapResult deviceaccesskey.BootstrapResult
 	bootstrapError  error
+	heartbeatInput  remotedevice.DirectHeartbeatInput
+	heartbeatResult remotedevice.DirectHeartbeatResult
+	heartbeatError  error
+}
+
+func (stub *remoteDeviceServiceStub) HeartbeatDirect(_ context.Context, input remotedevice.DirectHeartbeatInput) (remotedevice.DirectHeartbeatResult, error) {
+	stub.heartbeatInput = input
+	return stub.heartbeatResult, stub.heartbeatError
 }
 
 func (stub *remoteDeviceServiceStub) BootstrapAccessKey(_ context.Context, input deviceaccesskey.BootstrapInput) (deviceaccesskey.BootstrapResult, error) {
@@ -43,6 +51,10 @@ type remoteAllocationServiceStub struct {
 	refreshInput relayallocation.RefreshInput
 	result       relayallocation.Result
 	err          error
+}
+
+func (stub *remoteAllocationServiceStub) DeviceLinkGrantTrust() relayallocation.DeviceLinkGrantTrustBundle {
+	return stub.result.DeviceLinkGrantTrust
 }
 
 func (stub *remoteAllocationServiceStub) Create(_ context.Context, input relayallocation.CreateInput) (relayallocation.Result, error) {
@@ -203,7 +215,7 @@ func TestRegisterRemoteDeviceUsesAuthenticatedPrincipal(t *testing.T) {
 	session := authenticatedRemoteSession(auth.DeviceAuthorizationScope)
 	authService := &fakeAppAuthService{authenticated: session}
 	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
-	devices := &remoteDeviceServiceStub{result: remotedevice.Registration{Created: true, Credential: remotedevice.Credential{
+	devices := &remoteDeviceServiceStub{heartbeatResult: remotedevice.DirectHeartbeatResult{Enabled: true}, result: remotedevice.Registration{Created: true, Credential: remotedevice.Credential{
 		DeviceID: session.DeviceID, UserID: session.User.ID, RegisteredSessionID: session.SessionID,
 		DeviceName: "test-device", Platform: "windows", AgentVersion: "0.1.0", ProtocolMin: 1, ProtocolMax: 1,
 		Capabilities: []string{"relay.ping"}, PublicKeyThumbprint: strings.Repeat("a", 43), GrantVersion: 1,
@@ -226,6 +238,55 @@ func TestRegisterRemoteDeviceUsesAuthenticatedPrincipal(t *testing.T) {
 	}
 	if response.Header().Get("Cache-Control") != "no-store" || !strings.Contains(response.Body.String(), strings.Repeat("a", 43)) {
 		t.Fatalf("response headers/body = %#v %s", response.Header(), response.Body.String())
+	}
+}
+
+func TestRegisterAndHeartbeatDirectRemoteDevice(t *testing.T) {
+	session := authenticatedRemoteSession(auth.DeviceAuthorizationScope)
+	authService := &fakeAppAuthService{authenticated: session}
+	now := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
+	devices := &remoteDeviceServiceStub{heartbeatResult: remotedevice.DirectHeartbeatResult{Enabled: true}, result: remotedevice.Registration{Created: true, Credential: remotedevice.Credential{
+		DeviceID: session.DeviceID, UserID: session.User.ID, RegisteredSessionID: session.SessionID,
+		DeviceName: "direct-device", Platform: "linux", AgentVersion: "0.3.0", ProtocolMin: 2, ProtocolMax: 2,
+		Capabilities: []string{"direct.connect", "relay.ping"}, PublicKeyThumbprint: strings.Repeat("a", 43), GrantVersion: 1, KeyVersion: 1,
+		Status: "active", DirectEnabled: true, DirectTLSEnabled: true, DirectIP: "192.0.2.60", DirectPort: 9443, DirectConnectionEpoch: 11,
+		DirectLastSeenAt: &now, CreatedAt: now, UpdatedAt: now,
+	}}}
+	allocations := &remoteAllocationServiceStub{result: relayallocation.Result{DeviceLinkGrantTrust: relayallocation.DeviceLinkGrantTrustBundle{
+		Issuer: "wenzwork-control", Keys: []relayallocation.DeviceLinkGrantVerificationKey{{
+			KeyID: "direct-key", Algorithm: "Ed25519", PublicKey: strings.Repeat("A", 43),
+		}},
+	}}}
+	router := remoteDeviceTestRouter(authService, devices, allocations)
+	registrationBody := `{
+		"deviceName":"direct-device","platform":"linux","agentVersion":"0.3.0","protocolMin":2,"protocolMax":2,
+		"capabilities":["direct.connect","relay.ping"],"identityAlgorithm":"ed25519","identityPublicKey":"public-key","proof":"proof",
+		"directEnabled":true,"directTlsEnabled":true,"directIp":"192.0.2.60","directPort":9443,"directConnectionEpoch":11
+	}`
+	request := httptest.NewRequest(http.MethodPost, "/v1/device/registrations", strings.NewReader(registrationBody))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer access-token")
+	request.Header.Set("Idempotency-Key", "registration-direct-123")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated || !devices.input.DirectEnabled || devices.input.DirectIP != "192.0.2.60" ||
+		devices.input.DirectPort != 9443 || devices.input.DirectConnectionEpoch != 11 || !devices.input.DirectTLSEnabled ||
+		!strings.Contains(response.Body.String(), `"deviceLinkGrantTrust":{"issuer":"wenzwork-control"`) ||
+		!strings.Contains(response.Body.String(), `"directAvailable":true`) {
+		t.Fatalf("registration status/input/body = %d %+v %s", response.Code, devices.input, response.Body.String())
+	}
+
+	heartbeat := httptest.NewRequest(http.MethodPost, "/v1/device/direct-heartbeats", strings.NewReader(
+		`{"ip":"192.0.2.60","port":9443,"connectionEpoch":11,"tlsEnabled":true}`,
+	))
+	heartbeat.Header.Set("Content-Type", "application/json")
+	heartbeat.Header.Set("Authorization", "Bearer access-token")
+	heartbeatResponse := httptest.NewRecorder()
+	router.ServeHTTP(heartbeatResponse, heartbeat)
+	if heartbeatResponse.Code != http.StatusOK || !strings.Contains(heartbeatResponse.Body.String(), `"enabled":true`) || devices.heartbeatInput.UserID != session.User.ID ||
+		devices.heartbeatInput.SessionID != session.SessionID || devices.heartbeatInput.DeviceID != session.DeviceID ||
+		devices.heartbeatInput.IP != "192.0.2.60" || devices.heartbeatInput.Port != 9443 || devices.heartbeatInput.ConnectionEpoch != 11 || !devices.heartbeatInput.TLSEnabled {
+		t.Fatalf("heartbeat status/input/body = %d %+v %s", heartbeatResponse.Code, devices.heartbeatInput, heartbeatResponse.Body.String())
 	}
 }
 

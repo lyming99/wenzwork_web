@@ -82,4 +82,40 @@ func TestDevicePresenceFailsClosedWhenRouteIsExpired(t *testing.T) {
 	}
 }
 
+func TestDevicePresenceUsesSelectedDirectHeartbeat(t *testing.T) {
+	now := time.Date(2026, time.August, 28, 15, 0, 0, 0, time.UTC)
+	userID, deviceID := uuid.New(), uuid.New()
+	service, err := NewService(ServiceConfig{
+		Store: &Store{}, CursorKey: []byte("device-direct-presence-cursor-key-123"), Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := now.Add(-directPresenceTTL + time.Second)
+	row := deviceRow{
+		DeviceID: deviceID, UserID: userID, DeviceName: "direct-device", Platform: "linux", AgentVersion: "test",
+		CredentialStatus: "active", GrantStatus: stringPointer("enabled"), Capabilities: []byte(`[]`), Scopes: []byte(`[]`), GrantVersion: 1,
+		DirectModeEnabled: true, DirectEndpointEnabled: true, DirectIP: "192.0.2.40", DirectPort: 9443,
+		DirectConnectionEpoch: 8, DirectLastSeenAt: &fresh, UpdatedAt: now,
+	}
+	device, err := service.deviceFromRow(row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if device.Presence != "online" || !device.DirectAvailable || device.ConnectionMode != "direct" ||
+		device.DirectIP == nil || *device.DirectIP != "192.0.2.40" || device.DirectPort == nil || *device.DirectPort != 9443 {
+		t.Fatalf("fresh direct device = %+v", device)
+	}
+
+	stale := now.Add(-directPresenceTTL)
+	row.DirectLastSeenAt = &stale
+	device, err = service.deviceFromRow(row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if device.Presence != "offline" || device.DirectAvailable {
+		t.Fatalf("stale direct device = %+v", device)
+	}
+}
+
 func stringPointer(value string) *string { return &value }

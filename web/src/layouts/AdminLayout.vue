@@ -23,10 +23,9 @@ const logout = async () => {
         {{ auth.mfaEnforced ? 'MFA L' + auth.assuranceLevel : 'MFA 门禁未启用' }}
       </p>
       <nav class="side-nav" aria-label="管理导航">
-        <RouterLink
-          v-if="auth.systemSetupRequired && auth.hasPermission('admin.super')"
-          to="/admin/setup"
-          ><span class="side-icon" aria-hidden="true">⚙</span>首次系统初始化</RouterLink
+        <RouterLink v-if="auth.hasPermission('admin.super')" to="/admin/setup"
+          ><span class="side-icon" aria-hidden="true">⚙</span
+          >{{ auth.systemSetupRequired ? '首次系统初始化' : '系统设置' }}</RouterLink
         >
         <RouterLink to="/admin"
           ><span class="side-icon" aria-hidden="true">▦</span>运营总览</RouterLink

@@ -67,6 +67,26 @@ function New-HostDependencyPassword {
     return ([BitConverter]::ToString($bytes)).Replace('-', '').ToLowerInvariant()
 }
 
+function Invoke-DockerProbe {
+    param([Parameter(Mandatory = $true)][string[]]$ArgumentList)
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Docker writes failed probes to stderr. In Windows PowerShell, a global
+        # ErrorActionPreference of Stop can turn that expected stderr into a
+        # NativeCommandError before the caller can inspect LASTEXITCODE.
+        $ErrorActionPreference = 'Continue'
+        $output = @(& docker @ArgumentList 2>$null)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Output = $output
+    }
+}
+
 function Initialize-HostDependencies {
     param([Parameter(Mandatory = $true)][string]$EnvironmentPath)
     $databaseUrl = [Environment]::GetEnvironmentVariable('DATABASE_URL', 'Process')
@@ -79,8 +99,8 @@ function Initialize-HostDependencies {
         throw 'Docker is required when DATABASE_URL or REDIS_URL is not configured.'
     }
     if ([string]::IsNullOrWhiteSpace($databaseUrl)) {
-        & docker container inspect wenzwork-postgres 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) { throw 'wenzwork-postgres already exists but DATABASE_URL is missing; recover its credential or remove the stale container.' }
+        $postgresInspection = Invoke-DockerProbe -ArgumentList @('container', 'inspect', 'wenzwork-postgres')
+        if ($postgresInspection.ExitCode -eq 0) { throw 'wenzwork-postgres already exists but DATABASE_URL is missing; recover its credential or remove the stale container.' }
         $databasePassword = New-HostDependencyPassword
         Write-PackageLog -Message 'Starting the managed PostgreSQL container...'
         & docker run -d --name wenzwork-postgres --restart unless-stopped -e POSTGRES_USER=wenzwork -e "POSTGRES_PASSWORD=$databasePassword" -e POSTGRES_DB=wenzwork -p 127.0.0.1:54328:5432 -v wenzwork-postgres-data:/var/lib/postgresql/data postgres:17-alpine | Out-Null
@@ -90,8 +110,8 @@ function Initialize-HostDependencies {
         [Environment]::SetEnvironmentVariable('DATABASE_URL', $databaseUrl, 'Process')
     }
     if ([string]::IsNullOrWhiteSpace($redisUrl)) {
-        & docker container inspect wenzwork-redis 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) { throw 'wenzwork-redis already exists but REDIS_URL is missing; recover its credential or remove the stale container.' }
+        $redisInspection = Invoke-DockerProbe -ArgumentList @('container', 'inspect', 'wenzwork-redis')
+        if ($redisInspection.ExitCode -eq 0) { throw 'wenzwork-redis already exists but REDIS_URL is missing; recover its credential or remove the stale container.' }
         $redisPassword = New-HostDependencyPassword
         Write-PackageLog -Message 'Starting the managed Redis container...'
         & docker run -d --name wenzwork-redis --restart unless-stopped -p 127.0.0.1:63798:6379 -v wenzwork-redis-data:/data redis:8-alpine redis-server --appendonly yes --requirepass $redisPassword | Out-Null
@@ -100,18 +120,26 @@ function Initialize-HostDependencies {
         Set-PackageEnvironmentValue -Path $EnvironmentPath -Name 'REDIS_URL' -Value $redisUrl
         [Environment]::SetEnvironmentVariable('REDIS_URL', $redisUrl, 'Process')
     }
+    $postgresReady = $false
     foreach ($attempt in 1..60) {
-        & docker exec wenzwork-postgres pg_isready -U wenzwork -d wenzwork 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) { break }
+        $postgresProbe = Invoke-DockerProbe -ArgumentList @('exec', 'wenzwork-postgres', 'pg_isready', '-U', 'wenzwork', '-d', 'wenzwork')
+        if ($postgresProbe.ExitCode -eq 0) {
+            $postgresReady = $true
+            break
+        }
         Start-Sleep -Seconds 1
     }
-    if ($LASTEXITCODE -ne 0) { throw 'Managed PostgreSQL did not become ready.' }
+    if (-not $postgresReady) { throw 'Managed PostgreSQL did not become ready.' }
+    $redisReady = $false
     foreach ($attempt in 1..60) {
-        $reply = @(& docker exec -e "REDISCLI_AUTH=$redisPassword" wenzwork-redis redis-cli -h 127.0.0.1 -p 6379 ping 2>$null)
-        if ($reply -contains 'PONG') { break }
+        $redisProbe = Invoke-DockerProbe -ArgumentList @('exec', '-e', "REDISCLI_AUTH=$redisPassword", 'wenzwork-redis', 'redis-cli', '-h', '127.0.0.1', '-p', '6379', 'ping')
+        if ($redisProbe.ExitCode -eq 0 -and $redisProbe.Output -contains 'PONG') {
+            $redisReady = $true
+            break
+        }
         Start-Sleep -Seconds 1
     }
-    if ($reply -notcontains 'PONG') { throw 'Managed Redis did not become ready.' }
+    if (-not $redisReady) { throw 'Managed Redis did not become ready.' }
 }
 
 if ($metadata.WENZWORK_PACKAGE_COMPONENT -eq 'host') {

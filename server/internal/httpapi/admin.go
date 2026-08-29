@@ -142,17 +142,20 @@ type saveReleaseRequest struct {
 }
 
 type savePricingPlanRequest struct {
-	Code               string   `json:"code"`
-	Name               string   `json:"name"`
-	Description        string   `json:"description"`
-	PriceMinor         *int64   `json:"priceMinor"`
-	OriginalPriceMinor *int64   `json:"originalPriceMinor"`
-	Currency           string   `json:"currency"`
-	BillingPeriod      string   `json:"billingPeriod"`
-	Features           []string `json:"features"`
-	SortOrder          int      `json:"sortOrder"`
-	ExpectedVersion    int64    `json:"expectedVersion"`
-	ConfirmPriceChange bool     `json:"confirmPriceChange"`
+	Code                  string   `json:"code"`
+	Name                  string   `json:"name"`
+	Description           string   `json:"description"`
+	PriceMinor            *int64   `json:"priceMinor"`
+	OriginalPriceMinor    *int64   `json:"originalPriceMinor"`
+	Currency              string   `json:"currency"`
+	BillingPeriod         string   `json:"billingPeriod"`
+	Features              []string `json:"features"`
+	RemoteAccessEnabled   bool     `json:"remoteAccessEnabled"`
+	DeviceLimit           int      `json:"deviceLimit"`
+	MonthlyTrafficLimitGB *int64   `json:"monthlyTrafficLimitGb"`
+	SortOrder             int      `json:"sortOrder"`
+	ExpectedVersion       int64    `json:"expectedVersion"`
+	ConfirmPriceChange    bool     `json:"confirmPriceChange"`
 }
 
 type pricingPlanActionRequest struct {
@@ -364,7 +367,9 @@ func registerAdminRoutes(group *gin.RouterGroup, users AdminUserService, members
 			Code: request.Code, Name: request.Name, Description: request.Description,
 			PriceMinor: request.PriceMinor, OriginalPriceMinor: request.OriginalPriceMinor,
 			Currency: request.Currency, BillingPeriod: request.BillingPeriod,
-			Features: request.Features, SortOrder: request.SortOrder, ExpectedVersion: request.ExpectedVersion,
+			Features: request.Features, RemoteAccessEnabled: request.RemoteAccessEnabled,
+			DeviceLimit: request.DeviceLimit, MonthlyTrafficLimitGB: request.MonthlyTrafficLimitGB,
+			SortOrder: request.SortOrder, ExpectedVersion: request.ExpectedVersion,
 			ConfirmPriceChange: request.ConfirmPriceChange, ActorUserID: session.User.ID,
 		}
 		var result catalog.AdminPricingPlan
@@ -971,7 +976,7 @@ func writePricingPlanError(c *gin.Context, err error) {
 	case errors.Is(err, catalog.ErrPricingPlanStateConflict):
 		writeProblem(c, http.StatusConflict, "pricing_plan_state_conflict", "当前套餐状态不支持此操作", "只有已发布套餐可以下架。")
 	case errors.Is(err, catalog.ErrPricingPlanInvalid):
-		writeProblem(c, http.StatusBadRequest, "pricing_plan_invalid", "无法保存价格套餐", "请检查代码、金额、币种、计费周期、功能列表和展示顺序。")
+		writeProblem(c, http.StatusBadRequest, "pricing_plan_invalid", "无法保存价格套餐", "请检查代码、金额、币种、计费周期、设备与流量限制、功能列表和展示顺序。")
 	default:
 		writeProblem(c, http.StatusServiceUnavailable, "pricing_admin_unavailable", "价格管理服务暂不可用", "请稍后重试。")
 	}

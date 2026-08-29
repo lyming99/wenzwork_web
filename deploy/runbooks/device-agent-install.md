@@ -49,6 +49,8 @@ icacls $env:TEMP\wenzwork-device-agent.env /inheritance:r /grant:r 'SYSTEM:(F)' 
 
 HTTP 只允许精确回环主机；生产必须使用 HTTPS。环境文件只允许已审核的 `WENZWORK_*` 键，未知键、重复键、错误状态路径或无效 Access Key 会失败关闭。
 
+可选 IP 直连使用 `WENZWORK_DEVICE_DIRECT_ENABLED`、`WENZWORK_DEVICE_DIRECT_IP` 和 `WENZWORK_DEVICE_DIRECT_PORT`。开启时 IP 必须是本机可绑定、控制端可访问的单播地址，端口必须为 1～65535；Agent 会在注册前先绑定端口，失败时不会把无效端点上报给 Host。还需按最小来源范围开放设备防火墙的对应 TCP 入站规则。默认模板保持关闭。原生桌面端可把 Access Key 放在 `Authorization: Bearer` 请求头中向直连监听器换取 5 分钟、控制端身份 PoP 绑定的授权；可用 `WENZWORK_DEVICE_DIRECT_ACCESS_KEY` 单独配置，省略时复用 `WENZWORK_DEVICE_ACCESS_KEY`，两者都不得放入 URL 或日志。HTTPS 管理页还需同时配置 `WENZWORK_DEVICE_DIRECT_TLS_CERT_FILE` 与 `WENZWORK_DEVICE_DIRECT_TLS_KEY_FILE`；Agent 会拒绝已过期、尚未生效或 IP subjectAltName 与直连 IP 不一致的证书。
+
 ## 4. Linux 安装
 
 支持 systemd 主机。把以下占位符替换为同一 Release 的文件：

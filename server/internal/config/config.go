@@ -317,11 +317,18 @@ func (c Config) Validate() error {
 			problems = append(problems, fmt.Errorf("%s must use owner/repository format", name))
 		}
 	}
-	if strings.TrimSpace(c.SMTPHost) == "" {
-		problems = append(problems, fmt.Errorf("SMTP_HOST is required"))
-	}
-	if strings.TrimSpace(c.MailFrom) == "" {
-		problems = append(problems, fmt.Errorf("MAIL_FROM is required"))
+	mailConfigured := strings.TrimSpace(c.SMTPHost) != "" || strings.TrimSpace(c.SMTPUser) != "" ||
+		c.SMTPPassword != "" || strings.TrimSpace(c.MailFrom) != ""
+	if mailConfigured {
+		if strings.TrimSpace(c.SMTPHost) == "" {
+			problems = append(problems, fmt.Errorf("SMTP_HOST is required when system email is configured"))
+		}
+		if strings.TrimSpace(c.MailFrom) == "" {
+			problems = append(problems, fmt.Errorf("MAIL_FROM is required when system email is configured"))
+		}
+		if strings.TrimSpace(c.SMTPUser) != "" && c.SMTPPassword == "" {
+			problems = append(problems, fmt.Errorf("SMTP_PASSWORD is required when SMTP_USER is configured"))
+		}
 	}
 	if err := validateAbsoluteHTTPURL("PUBLIC_BASE_URL", c.PublicBaseURL); err != nil {
 		problems = append(problems, err)

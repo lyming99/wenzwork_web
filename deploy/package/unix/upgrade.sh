@@ -233,7 +233,7 @@ upgrade_progress 65 "Backing up package files for $WENZWORK_PACKAGE_VERSION."
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup="$PACKAGE_ROOT/cache/backups/${WENZWORK_PACKAGE_VERSION}_$timestamp"
 mkdir -p "$backup"
-for name in bin config runtime/lib web migrations .env start.sh stop.sh init.sh upgrade.sh backup.sh Start.ps1 Stop.ps1 Init.ps1 Upgrade.ps1 Backup.ps1 VERSION PACKAGE-MANIFEST.json; do
+for name in bin config runtime/lib web migrations .env start.sh stop.sh init.sh upgrade.sh backup.sh start.cmd Start.ps1 Stop.ps1 Init.ps1 Upgrade.ps1 Backup.ps1 VERSION PACKAGE-MANIFEST.json; do
   [[ -e "$PACKAGE_ROOT/$name" ]] || continue
   mkdir -p "$backup/$(dirname -- "$name")"
   cp -a "$PACKAGE_ROOT/$name" "$backup/$name"
@@ -254,10 +254,10 @@ fi
 restore_backup() {
   package_log "Restoring package files from $backup..."
   rm -rf -- "${PACKAGE_ROOT:?}/bin" "${PACKAGE_ROOT:?}/config" "${PACKAGE_ROOT:?}/runtime/lib" "${PACKAGE_ROOT:?}/web" "${PACKAGE_ROOT:?}/migrations"
-  for name in .env start.sh stop.sh init.sh upgrade.sh backup.sh Start.ps1 Stop.ps1 Init.ps1 Upgrade.ps1 Backup.ps1 VERSION PACKAGE-MANIFEST.json; do
+  for name in .env start.sh stop.sh init.sh upgrade.sh backup.sh start.cmd Start.ps1 Stop.ps1 Init.ps1 Upgrade.ps1 Backup.ps1 VERSION PACKAGE-MANIFEST.json; do
     rm -f -- "$PACKAGE_ROOT/$name"
   done
-  for name in bin config runtime/lib web migrations .env start.sh stop.sh init.sh upgrade.sh backup.sh Start.ps1 Stop.ps1 Init.ps1 Upgrade.ps1 Backup.ps1 VERSION PACKAGE-MANIFEST.json; do
+  for name in bin config runtime/lib web migrations .env start.sh stop.sh init.sh upgrade.sh backup.sh start.cmd Start.ps1 Stop.ps1 Init.ps1 Upgrade.ps1 Backup.ps1 VERSION PACKAGE-MANIFEST.json; do
     [[ -e "$backup/$name" ]] || continue
     mkdir -p "$PACKAGE_ROOT/$(dirname -- "$name")"
     cp -a "$backup/$name" "$PACKAGE_ROOT/$name"
@@ -273,10 +273,10 @@ install_stage() {
   done
   mkdir -p "$PACKAGE_ROOT/config"
   cp -a "$stage/config/." "$PACKAGE_ROOT/config/"
-  for name in start.sh stop.sh init.sh upgrade.sh backup.sh Start.ps1 Stop.ps1 Init.ps1 Upgrade.ps1 Backup.ps1 VERSION PACKAGE-MANIFEST.json; do
+  for name in start.sh stop.sh init.sh upgrade.sh backup.sh start.cmd Start.ps1 Stop.ps1 Init.ps1 Upgrade.ps1 Backup.ps1 VERSION PACKAGE-MANIFEST.json; do
     rm -f -- "$PACKAGE_ROOT/$name"
   done
-  for name in start.sh stop.sh init.sh upgrade.sh backup.sh Start.ps1 Stop.ps1 Init.ps1 Upgrade.ps1 Backup.ps1 VERSION PACKAGE-MANIFEST.json; do
+  for name in start.sh stop.sh init.sh upgrade.sh backup.sh start.cmd Start.ps1 Stop.ps1 Init.ps1 Upgrade.ps1 Backup.ps1 VERSION PACKAGE-MANIFEST.json; do
     [[ -e "$stage/$name" ]] || continue
     cp -a "$stage/$name" "$PACKAGE_ROOT/$name"
   done

@@ -128,11 +128,19 @@ access_key="device_$(printf 'k%.0s' {1..43})"
 cat > "$config_root/agent.env" <<EOF
 WENZWORK_CONTROL_URL=http://control.example.test:8080
 WENZWORK_DEVICE_ACCESS_KEY=$access_key
+WENZWORK_DEVICE_DIRECT_ACCESS_KEY=$access_key
 WENZWORK_DEVICE_STATE_FILE=$state_path
 WENZWORK_DEVICE_WORKSPACE=$data_root/workspace
 WENZWORK_AGENT_SECRET_STORE=file
 EOF
 agent_validate_env_file "$config_root/agent.env" "$state_path"
+invalid_direct_env="$test_dir/invalid-direct.env"
+sed 's/^WENZWORK_DEVICE_DIRECT_ACCESS_KEY=.*/WENZWORK_DEVICE_DIRECT_ACCESS_KEY=invalid/' "$config_root/agent.env" > "$invalid_direct_env"
+expect_failure bash -c "source '$script_dir/lib/common.sh'; agent_validate_env_file '$invalid_direct_env' '$state_path'"
+duplicate_direct_env="$test_dir/duplicate-direct.env"
+cp "$config_root/agent.env" "$duplicate_direct_env"
+printf 'WENZWORK_DEVICE_DIRECT_ACCESS_KEY=%s\n' "$access_key" >> "$duplicate_direct_env"
+expect_failure bash -c "source '$script_dir/lib/common.sh'; agent_validate_env_file '$duplicate_direct_env' '$state_path'"
 backup_dir=$(agent_create_backup "$data_root" "$config_root/agent.env" "$backup_root" v1)
 printf 'migrated\n' > "$state_path.business.sqlite"
 printf 'changed\n' >> "$config_root/agent.env"

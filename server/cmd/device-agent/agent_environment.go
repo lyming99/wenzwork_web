@@ -86,6 +86,30 @@ func (state *agentState) agentEnvironmentList() []string {
 	return result
 }
 
+func (state *agentState) setTerminalHostEnvironment(environment []string) {
+	if state == nil {
+		return
+	}
+	state.servicesMu.Lock()
+	defer state.servicesMu.Unlock()
+	// The production caller sets this before any process supervisor can be
+	// created. Keep the guard so a later refactor cannot silently change the
+	// environment of only some newly opened terminals.
+	if state.processes != nil || state.terminals != nil || state.aiTools != nil {
+		return
+	}
+	state.terminalHostEnvironment = append([]string(nil), environment...)
+}
+
+func (state *agentState) terminalHostEnvironmentList() []string {
+	if state == nil {
+		return nil
+	}
+	state.servicesMu.Lock()
+	defer state.servicesMu.Unlock()
+	return append([]string(nil), state.terminalHostEnvironment...)
+}
+
 func (state *agentState) replaceAgentEnvironment(ctx context.Context, variables map[string]string, expectedRevision *uint64) (map[string]any, uint64, error) {
 	normalized, encoded, err := normalizeAgentEnvironment(variables)
 	if err != nil {

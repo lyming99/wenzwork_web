@@ -29,6 +29,7 @@ type Dependencies struct {
 	AppAuth                 AppAuthService
 	UserAdmin               AdminUserService
 	SystemSetup             SystemSetupService
+	SystemEmail             SystemEmailService
 	AuthHTTP                AuthHTTPConfig
 	Membership              MembershipService
 	MembershipAdmin         AdminMembershipService
@@ -117,6 +118,7 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	registerAdminRoutes(v1, deps.UserAdmin, deps.MembershipAdmin, deps.CatalogAdmin, deps.ReleaseUploads, deps.ReleaseSources, deps.ReleaseAccessKeys, deps.PricingAdmin, deps.Auth, deps.AuthHTTP)
 	registerRemoteAccessPolicyRoutes(v1, deps.RemoteAccessPolicy, deps.Auth, deps.AuthHTTP)
 	registerSystemSetupRoutes(v1, deps.SystemSetup, deps.Auth, deps.AuthHTTP)
+	registerSystemEmailRoutes(v1, deps.SystemEmail, deps.Auth, deps.AuthHTTP)
 	registerHelpRoutes(v1, deps.Help, deps.HelpAdmin, deps.Auth, deps.AuthHTTP)
 	registerFeedbackRoutes(v1, deps.Feedback, deps.Auth, deps.AuthHTTP)
 	registerRelayRoutes(v1, deps.Relay, deps.Auth, deps.AuthHTTP, deps.PublicBaseURL, deps.RelayDirectoryURL, deps.RelayArtifactBaseURL, deps.RelayBootstrapAssetsDir, deps.RelayDefaultRegion, deps.RelayDefaultPool, deps.RelayDefaultCell)

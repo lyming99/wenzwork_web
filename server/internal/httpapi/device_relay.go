@@ -23,6 +23,14 @@ type RemoteDeviceService interface {
 	Register(context.Context, remotedevice.RegisterInput) (remotedevice.Registration, error)
 }
 
+type remoteDeviceDirectHeartbeatService interface {
+	HeartbeatDirect(context.Context, remotedevice.DirectHeartbeatInput) (remotedevice.DirectHeartbeatResult, error)
+}
+
+type remoteDeviceLinkTrustService interface {
+	DeviceLinkGrantTrust() relayallocation.DeviceLinkGrantTrustBundle
+}
+
 type RemoteDeviceBootstrapService interface {
 	BootstrapAccessKey(context.Context, deviceaccesskey.BootstrapInput) (deviceaccesskey.BootstrapResult, error)
 }
@@ -37,15 +45,27 @@ type RemoteAllocationService interface {
 }
 
 type registerRemoteDeviceRequest struct {
-	DeviceName        string   `json:"deviceName"`
-	Platform          string   `json:"platform"`
-	AgentVersion      string   `json:"agentVersion"`
-	ProtocolMin       uint32   `json:"protocolMin"`
-	ProtocolMax       uint32   `json:"protocolMax"`
-	Capabilities      []string `json:"capabilities"`
-	IdentityAlgorithm string   `json:"identityAlgorithm"`
-	IdentityPublicKey string   `json:"identityPublicKey"`
-	Proof             string   `json:"proof"`
+	DeviceName            string   `json:"deviceName"`
+	Platform              string   `json:"platform"`
+	AgentVersion          string   `json:"agentVersion"`
+	ProtocolMin           uint32   `json:"protocolMin"`
+	ProtocolMax           uint32   `json:"protocolMax"`
+	Capabilities          []string `json:"capabilities"`
+	IdentityAlgorithm     string   `json:"identityAlgorithm"`
+	IdentityPublicKey     string   `json:"identityPublicKey"`
+	Proof                 string   `json:"proof"`
+	DirectEnabled         bool     `json:"directEnabled"`
+	DirectTLSEnabled      bool     `json:"directTlsEnabled"`
+	DirectIP              string   `json:"directIp"`
+	DirectPort            uint32   `json:"directPort"`
+	DirectConnectionEpoch uint64   `json:"directConnectionEpoch"`
+}
+
+type directRemoteDeviceHeartbeatRequest struct {
+	IP              string `json:"ip"`
+	Port            uint32 `json:"port"`
+	ConnectionEpoch uint64 `json:"connectionEpoch"`
+	TLSEnabled      bool   `json:"tlsEnabled"`
 }
 
 type bootstrapRemoteDeviceRequest struct {
@@ -70,9 +90,10 @@ type rotateRemoteDeviceKeyResponse struct {
 }
 
 type remoteDeviceResponse struct {
-	Device              remoteDeviceView `json:"device"`
-	PublicKeyThumbprint string           `json:"publicKeyThumbprint"`
-	ApprovalRequired    bool             `json:"approvalRequired"`
+	Device               remoteDeviceView                            `json:"device"`
+	PublicKeyThumbprint  string                                      `json:"publicKeyThumbprint"`
+	ApprovalRequired     bool                                        `json:"approvalRequired"`
+	DeviceLinkGrantTrust *relayallocation.DeviceLinkGrantTrustBundle `json:"deviceLinkGrantTrust,omitempty"`
 }
 
 type remoteDeviceView struct {
@@ -90,6 +111,12 @@ type remoteDeviceView struct {
 	LastSeenAt           *time.Time `json:"lastSeenAt"`
 	LastSyncAt           *time.Time `json:"lastSyncAt"`
 	RemoteEnabledAt      *time.Time `json:"remoteEnabledAt"`
+	ConnectionMode       string     `json:"connectionMode"`
+	DirectModeEnabled    bool       `json:"directModeEnabled"`
+	DirectAvailable      bool       `json:"directAvailable"`
+	DirectTLSEnabled     bool       `json:"directTlsEnabled"`
+	DirectIP             *string    `json:"directIp"`
+	DirectPort           *uint32    `json:"directPort"`
 }
 
 type relayAllocationRequest struct {
@@ -135,7 +162,7 @@ func registerDeviceRelayRoutes(group *gin.RouterGroup, appAuth AppAuthService, d
 			return
 		}
 		if errors.Is(err, remoteaccesspolicy.ErrMembershipRequired) {
-			writeProblem(c, http.StatusForbidden, "membership_required", "需要有效会员", "只有有效 Pro 会员可以接入远程设备。")
+			writeProblem(c, http.StatusForbidden, "membership_required", "当前套餐未开放设备接入", "请等待 Free 套餐临时开放，或使用已开放远程设备功能的有效会员套餐。")
 			return
 		}
 		if err != nil {
@@ -155,6 +182,20 @@ func registerDeviceRelayRoutes(group *gin.RouterGroup, appAuth AppAuthService, d
 		if !decodeJSON(c, &request) {
 			return
 		}
+		var directTrust *relayallocation.DeviceLinkGrantTrustBundle
+		if request.DirectEnabled {
+			provider, supported := allocations.(remoteDeviceLinkTrustService)
+			if !supported || provider == nil {
+				writeProblem(c, http.StatusServiceUnavailable, "remote_direct_unavailable", "设备直连暂不可用", "管理端无法下发直连授权验签信息。")
+				return
+			}
+			trust := provider.DeviceLinkGrantTrust()
+			if trust.Issuer == "" || len(trust.Keys) == 0 {
+				writeProblem(c, http.StatusServiceUnavailable, "remote_direct_unavailable", "设备直连暂不可用", "管理端直连授权验签信息尚未就绪。")
+				return
+			}
+			directTrust = &trust
+		}
 		session, _ := remoteAppSessionFrom(c)
 		result, err := devices.Register(c.Request.Context(), remotedevice.RegisterInput{
 			UserID: session.User.ID, SessionID: session.SessionID, DeviceID: session.DeviceID,
@@ -162,21 +203,54 @@ func registerDeviceRelayRoutes(group *gin.RouterGroup, appAuth AppAuthService, d
 			Platform: request.Platform, AgentVersion: request.AgentVersion,
 			ProtocolMin: request.ProtocolMin, ProtocolMax: request.ProtocolMax, Capabilities: request.Capabilities,
 			IdentityAlgorithm: request.IdentityAlgorithm, IdentityPublicKey: request.IdentityPublicKey, Proof: request.Proof,
+			DirectEnabled: request.DirectEnabled, DirectTLSEnabled: request.DirectTLSEnabled, DirectIP: request.DirectIP, DirectPort: request.DirectPort,
+			DirectConnectionEpoch: request.DirectConnectionEpoch,
 		})
 		if writeRemoteDeviceProblem(c, err) {
 			return
 		}
 		credential := result.Credential
 		enabledAt := credential.CreatedAt.UTC()
+		var directIP *string
+		var directPort *uint32
+		if credential.DirectEnabled {
+			directIP, directPort = &credential.DirectIP, &credential.DirectPort
+		}
+		connectionMode := "relay"
+		if credential.DirectModeEnabled {
+			connectionMode = "direct"
+		}
 		c.JSON(http.StatusCreated, remoteDeviceResponse{
 			Device: remoteDeviceView{
 				ID: credential.DeviceID, InstallationDeviceID: credential.DeviceID, DeviceName: credential.DeviceName,
 				Platform: credential.Platform, AgentVersion: credential.AgentVersion, Status: credential.Status,
 				Presence: "offline", Capabilities: credential.Capabilities, Scopes: credential.Scopes,
 				GrantVersion: credential.GrantVersion, KeyVersion: credential.KeyVersion, RemoteEnabledAt: &enabledAt,
+				ConnectionMode: connectionMode, DirectModeEnabled: credential.DirectModeEnabled,
+				DirectAvailable: credential.DirectEnabled, DirectTLSEnabled: credential.DirectTLSEnabled, DirectIP: directIP, DirectPort: directPort,
 			},
-			PublicKeyThumbprint: credential.PublicKeyThumbprint, ApprovalRequired: false,
+			PublicKeyThumbprint: credential.PublicKeyThumbprint, ApprovalRequired: false, DeviceLinkGrantTrust: directTrust,
 		})
+	})
+	device.POST("/direct-heartbeats", func(c *gin.Context) {
+		heartbeats, supported := devices.(remoteDeviceDirectHeartbeatService)
+		if !supported || heartbeats == nil {
+			writeProblem(c, http.StatusServiceUnavailable, "remote_direct_unavailable", "设备直连暂不可用", "请升级管理端后重试。")
+			return
+		}
+		var request directRemoteDeviceHeartbeatRequest
+		if !decodeJSON(c, &request) {
+			return
+		}
+		session, _ := remoteAppSessionFrom(c)
+		result, err := heartbeats.HeartbeatDirect(c.Request.Context(), remotedevice.DirectHeartbeatInput{
+			UserID: session.User.ID, SessionID: session.SessionID, DeviceID: session.DeviceID,
+			IP: request.IP, Port: request.Port, ConnectionEpoch: request.ConnectionEpoch, TLSEnabled: request.TLSEnabled,
+		})
+		if writeRemoteDeviceProblem(c, err) {
+			return
+		}
+		c.JSON(http.StatusOK, result)
 	})
 	device.POST("/key-rotations", func(c *gin.Context) {
 		rotator, supported := devices.(RemoteDeviceKeyRotationService)
@@ -323,7 +397,7 @@ func writeRemoteDeviceProblem(c *gin.Context, err error) bool {
 	case errors.Is(err, remotedevice.ErrForbidden):
 		writeProblem(c, http.StatusForbidden, "remote_device_forbidden", "设备不属于当前用户", "请使用当前登录凭证对应的设备标识。")
 	case errors.Is(err, remoteaccesspolicy.ErrMembershipRequired):
-		writeProblem(c, http.StatusForbidden, "membership_required", "需要有效会员", "只有有效 Pro 会员可以接入远程设备。")
+		writeProblem(c, http.StatusForbidden, "membership_required", "当前套餐未开放设备接入", "请等待 Free 套餐临时开放，或使用已开放远程设备功能的有效会员套餐。")
 	case errors.Is(err, remoteaccesspolicy.ErrDeviceLimitReached):
 		writeProblem(c, http.StatusConflict, "device_limit_reached", "设备数量已达上限", "请先永久删除不再使用的设备，再接入新设备。")
 	case errors.Is(err, remotedevice.ErrKeyRotationRequired):
@@ -346,7 +420,7 @@ func writeRelayAllocationProblem(c *gin.Context, err error) bool {
 	case errors.Is(err, relayallocation.ErrDeviceForbidden):
 		writeProblem(c, http.StatusForbidden, "remote_device_forbidden", "设备不属于当前用户", "remoteDeviceId 必须等于应用访问令牌中的 device_id。")
 	case errors.Is(err, remoteaccesspolicy.ErrMembershipRequired):
-		writeProblem(c, http.StatusForbidden, "membership_required", "需要有效会员", "当前账户没有有效 Pro 会员，无法获取远程连接凭证。")
+		writeProblem(c, http.StatusForbidden, "membership_required", "当前套餐未开放设备接入", "当前账户没有可用的远程设备套餐权限，无法获取连接凭证。")
 	case errors.Is(err, relayallocation.ErrDeviceInactive):
 		writeProblem(c, http.StatusConflict, "remote_device_inactive", "设备当前不可连接", "请联系管理员检查设备状态。")
 	case errors.Is(err, relayallocation.ErrStaleConnectionEpoch):

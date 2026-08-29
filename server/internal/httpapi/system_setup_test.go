@@ -89,32 +89,6 @@ func TestSystemSetupRouteMapsAuthenticatedRequest(t *testing.T) {
 	}
 }
 
-func TestSystemSetupRouteReportsAdministratorEmailTestFailure(t *testing.T) {
-	csrfToken, csrfHash, err := auth.NewOpaqueToken()
-	if err != nil {
-		t.Fatal(err)
-	}
-	service := &systemSetupServiceStub{required: true, applyErr: systemsetup.ErrSMTPUnavailable}
-	authService := &fakeAuthService{authenticated: auth.AuthenticatedSession{
-		ID: uuid.New(), User: auth.User{ID: uuid.New(), Status: "active", Roles: []string{"super_admin"}},
-		CSRFTokenHash: csrfHash, AssuranceLevel: 1, AbsoluteExpiresAt: time.Now().Add(time.Hour),
-	}}
-	request := httptest.NewRequest(http.MethodPut, "/api/v1/admin/system-setup", strings.NewReader(`{}`))
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Origin", "http://localhost:5173")
-	request.Header.Set("X-CSRF-Token", csrfToken)
-	request.AddCookie(&http.Cookie{Name: "wenzwork_session", Value: "session-token"})
-	request.AddCookie(&http.Cookie{Name: "wenzwork_csrf", Value: csrfToken})
-	response := httptest.NewRecorder()
-
-	newSystemSetupTestRouter(authService, service).ServeHTTP(response, request)
-
-	if response.Code != http.StatusServiceUnavailable ||
-		!strings.Contains(response.Body.String(), `"code":"system_setup_smtp_unavailable"`) {
-		t.Fatalf("status = %d body=%s", response.Code, response.Body.String())
-	}
-}
-
 func newSystemSetupTestRouter(authService AuthService, setup SystemSetupService) http.Handler {
 	return NewRouter(Dependencies{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Auth: authService, SystemSetup: setup,

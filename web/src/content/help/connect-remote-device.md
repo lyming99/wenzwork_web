@@ -3,12 +3,12 @@ title: 接入一台远程设备
 description: 生成 Device Access Key 和一键安装脚本，让 Windows、Linux 或 macOS 设备安全上线。
 category: 远程设备
 order: 30
-updatedAt: 2026-08-23
+updatedAt: 2026-08-28
 ---
 
 # 接入一台远程设备
 
-Device Agent 主动连接 Host 与分配到的 Relay，不需要在工作设备上开放固定入站端口。一份 Access Key 只用于设备交换短期凭证，不会发送给 Relay。
+Device Agent 默认主动连接 Host 与分配到的 Relay，不需要在工作设备上开放固定入站端口。也可以显式开启 IP 直连监听器，让工作台绕过 Relay；两种模式使用同一套端到端加密 Link 与远程功能。一份 Access Key 只用于设备交换短期凭证，不会发送给 Relay。
 
 设备接入要求账户具有当前有效的 Pro 会员。每个账号默认最多保留 10 台已接入设备，管理员可以在会员管理后台即时调整该上限；吊销 Access Key 或关闭远程访问不会释放名额，永久删除不再使用的设备后才可重新接入。
 
@@ -46,5 +46,21 @@ Device Agent 主动连接 Host 与分配到的 Relay，不需要在工作设备�
 - 使用 HTTPS 时检查证书主机名和 CA 信任。
 
 设备丢失或脚本误泄露时，立即在页面吊销对应 Key；需要继续接入时创建或轮换新 Key，不要复用已暴露的脚本。
+
+## 可选：开启 IP 直连
+
+在受保护的 Device Agent `.env` 中设置以下三项，并把 IP 换成控制端能够访问、且确实属于该设备的单播地址：
+
+```dotenv
+WENZWORK_DEVICE_DIRECT_ENABLED=true
+WENZWORK_DEVICE_DIRECT_IP=192.168.1.50
+WENZWORK_DEVICE_DIRECT_PORT=9443
+# 可选：为原生桌面直连单独设置；省略时复用 WENZWORK_DEVICE_ACCESS_KEY
+# WENZWORK_DEVICE_DIRECT_ACCESS_KEY=device_replace_with_a_43_character_urlsafe_access_key
+```
+
+重启 Agent，确认防火墙允许该 TCP 端口。Agent 成功绑定后会向 Host 上报端点并每 15 秒刷新心跳。随后在“远程设备 → 修改设备”中开启“IP 直连模式”；若端点没有有效心跳，管理端会拒绝开启。
+
+直连端口只接受 remote/v2 二进制 Carrier。网页模式使用 Host 签发的短期 DeviceConnectionGrant；原生桌面可用 Access Key 通过 `POST /v2/direct/device-links` 换取由 Agent 身份签发、有效期 5 分钟且绑定控制器 Ed25519 持钥证明的本地 Grant。Access Key 只允许放在 `Authorization: Bearer` 请求头，不得写入 URL 或日志；两类 Grant 使用独立验签域和连接 registry，不互相回退或顶替，业务内容仍由 Link 层端到端加密。未配置证书时入口使用 `ws://`，HTTPS 管理页会受浏览器混合内容策略限制。要使用 WSS，同时配置 `WENZWORK_DEVICE_DIRECT_TLS_CERT_FILE` 和 `WENZWORK_DEVICE_DIRECT_TLS_KEY_FILE`；证书必须把直连 IP 写入 IP 类型的 subjectAltName，并受控制端浏览器信任。
 
 下一步阅读[使用远程项目工作区](/help/remote-workspace)。

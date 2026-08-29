@@ -77,7 +77,7 @@ try {
     $timestamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
     $backup = Join-Path $root "cache\backups\$($currentVersion)_$timestamp"
     [void](New-Item -ItemType Directory -Path $backup)
-    $managed = @('bin', 'config', 'runtime\lib', 'web', 'migrations', '.env', 'start.sh', 'stop.sh', 'init.sh', 'upgrade.sh', 'backup.sh', 'Start.ps1', 'Stop.ps1', 'Init.ps1', 'Upgrade.ps1', 'Backup.ps1', 'VERSION', 'PACKAGE-MANIFEST.json')
+    $managed = @('bin', 'config', 'runtime\lib', 'web', 'migrations', '.env', 'start.sh', 'stop.sh', 'init.sh', 'upgrade.sh', 'backup.sh', 'start.cmd', 'Start.ps1', 'Stop.ps1', 'Init.ps1', 'Upgrade.ps1', 'Backup.ps1', 'VERSION', 'PACKAGE-MANIFEST.json')
     foreach ($name in $managed) {
         $source = Join-Path $root $name
         if (-not (Test-Path -LiteralPath $source)) { continue }
@@ -123,7 +123,7 @@ try {
             }
         }
         Copy-Item -Path (Join-Path $stage 'config\*') -Destination (Join-Path $root 'config') -Recurse -Force
-        $lifecycleFiles = @('start.sh', 'stop.sh', 'init.sh', 'upgrade.sh', 'backup.sh', 'Start.ps1', 'Stop.ps1', 'Init.ps1', 'Upgrade.ps1', 'Backup.ps1', 'VERSION', 'PACKAGE-MANIFEST.json')
+        $lifecycleFiles = @('start.sh', 'stop.sh', 'init.sh', 'upgrade.sh', 'backup.sh', 'start.cmd', 'Start.ps1', 'Stop.ps1', 'Init.ps1', 'Upgrade.ps1', 'Backup.ps1', 'VERSION', 'PACKAGE-MANIFEST.json')
         foreach ($name in $lifecycleFiles) {
             Remove-Item -LiteralPath (Join-Path $root $name) -Force -ErrorAction SilentlyContinue
         }

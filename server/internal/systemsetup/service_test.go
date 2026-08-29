@@ -1,26 +1,13 @@
 package systemsetup
 
 import (
-	"context"
-	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/wenzwork/wenzwork-web/server/internal/config"
-	"github.com/wenzwork/wenzwork-web/server/internal/mailer"
 )
-
-type recordingSender struct {
-	message mailer.Message
-	err     error
-}
-
-func (sender *recordingSender) Send(_ context.Context, message mailer.Message) error {
-	sender.message = message
-	return sender.err
-}
 
 func TestCandidatePromotesHTTPSConfigurationToProduction(t *testing.T) {
 	service := NewService(validCurrentConfig(t), "admin@example.test", "administrator-password", "Administrator")
@@ -105,21 +92,16 @@ func TestCandidateRejectsNonLoopbackPlainHTTP(t *testing.T) {
 	}
 }
 
-func TestSendAdministratorTestEmailTargetsBootstrapAdministrator(t *testing.T) {
-	sender := &recordingSender{}
-	if err := sendAdministratorTestEmail(context.Background(), sender, " admin@example.test "); err != nil {
-		t.Fatalf("sendAdministratorTestEmail() error = %v", err)
-	}
-	if sender.message.To != "admin@example.test" || sender.message.Subject == "" || sender.message.Text == "" {
-		t.Fatalf("administrator test message = %+v", sender.message)
-	}
-}
-
-func TestSendAdministratorTestEmailReturnsDeliveryFailure(t *testing.T) {
-	want := errors.New("SMTP rejected recipient")
-	err := sendAdministratorTestEmail(context.Background(), &recordingSender{err: want}, "admin@example.test")
-	if !errors.Is(err, want) {
-		t.Fatalf("sendAdministratorTestEmail() error = %v, want %v", err, want)
+func TestCandidateAllowsSystemEmailToRemainUnconfigured(t *testing.T) {
+	service := NewService(validCurrentConfig(t), "admin@example.test", "administrator-password", "Administrator")
+	_, _, err := service.candidate(ApplyInput{
+		PublicBaseURL: "http://localhost:8080", DatabaseURL: "postgres://wenzwork@localhost/wenzwork",
+		RedisURL: "redis://localhost:6379/0", SMTPPort: 1025, ClearSMTPPassword: true,
+		WebGitHubRepository: "acme/wenzwork-web", DesktopGitHubRepository: "acme/wenzwork-desktop",
+		MobileGitHubRepository: "acme/wenzwork-mobile",
+	})
+	if err != nil {
+		t.Fatalf("candidate() with no system email error = %v", err)
 	}
 }
 

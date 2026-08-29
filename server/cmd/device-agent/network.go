@@ -34,10 +34,12 @@ import (
 )
 
 type targetConfig struct {
-	controlURL *url.URL
-	accessKey  string
-	tlsCAFile  string
-	state      *agentState
+	controlURL      *url.URL
+	accessKey       string
+	directAccessKey string
+	tlsCAFile       string
+	direct          directV2Config
+	state           *agentState
 }
 
 type allocationEndpoint struct {
@@ -175,6 +177,13 @@ func runTarget(ctx context.Context, config targetConfig) error {
 	if err := config.state.setSessionID(sessionID); err != nil {
 		return err
 	}
+	directRuntime, err := prepareDirectV2Runtime(config.direct, config.controlURL, config.state)
+	if err != nil {
+		return err
+	}
+	if directRuntime != nil {
+		defer directRuntime.close()
+	}
 	publicKey := config.state.identity.Public().(ed25519.PublicKey)
 	proof, err := remotedevice.SignRegistration(config.state.identity, sessionID, config.state.DeviceID)
 	if err != nil {
@@ -185,17 +194,37 @@ func runTarget(ctx context.Context, config targetConfig) error {
 		platform = "macos"
 	}
 	var registration struct {
-		PublicKeyThumbprint string `json:"publicKeyThumbprint"`
+		PublicKeyThumbprint  string                     `json:"publicKeyThumbprint"`
+		DeviceLinkGrantTrust deviceLinkGrantTrustBundle `json:"deviceLinkGrantTrust"`
+		Device               struct {
+			DirectModeEnabled bool `json:"directModeEnabled"`
+		} `json:"device"`
+	}
+	directRegistration := directV2Registration{}
+	capabilities := agentRegistrationCapabilities(config.state)
+	if directRuntime != nil {
+		directRegistration = directRuntime.registration()
+		capabilities = append(capabilities, "direct.connect")
 	}
 	if err := tokens.doJSON(ctx, http.MethodPost, "/v1/device/registrations", "registration-"+uuid.NewString(), map[string]any{
 		"deviceName": deviceName, "platform": platform, "agentVersion": version, "protocolMin": 2, "protocolMax": 2,
-		"capabilities":      agentRegistrationCapabilities(config.state),
+		"capabilities":      capabilities,
 		"identityAlgorithm": "ed25519", "identityPublicKey": base64.RawURLEncoding.EncodeToString(publicKey), "proof": proof,
+		"directEnabled": directRegistration.Enabled, "directIp": directRegistration.IP,
+		"directPort": directRegistration.Port, "directConnectionEpoch": directRegistration.ConnectionEpoch,
+		"directTlsEnabled": directRegistration.TLSEnabled,
 	}, &registration); err != nil {
 		return fmt.Errorf("device registration failed: %w", err)
 	}
 	if registration.PublicKeyThumbprint != remoteauth.PublicKeyThumbprint(publicKey) {
 		return errors.New("device registration identity mismatch")
+	}
+	var directVerifier remoteauth.DeviceLinkGrantVerifier
+	if directRuntime != nil {
+		directVerifier, err = verifierFromDeviceLinkGrantTrustBundle(registration.DeviceLinkGrantTrust)
+		if err != nil {
+			return errors.New("device direct connection trust bundle is invalid")
+		}
 	}
 	controlLoop, err := newDeviceControlLoop(config.state, controlStore, tokens, client)
 	if err != nil {
@@ -208,10 +237,32 @@ func runTarget(ctx context.Context, config targetConfig) error {
 	config.state.controlLoop = controlLoop
 	controlResult := make(chan error, 1)
 	relayResult := make(chan error, 1)
+	var directResult <-chan error
+	var hostRoutes *hostV2RouteCoordinator
+	if directRuntime != nil {
+		hostRoutes = newHostV2RouteCoordinator(registration.Device.DirectModeEnabled)
+	}
 	go func() { controlResult <- controlLoop.run(runContext) }()
 	// remote/v2 is deliberately not a negotiated fallback. A v2 Agent obtains
 	// only a /v2 Carrier allocation and rejects the legacy v1 subprotocol.
-	go func() { relayResult <- runTargetRelayLoopV2(runContext, client, tokens, config.state) }()
+	go func() {
+		if hostRoutes == nil {
+			relayResult <- runTargetRelayLoopV2(runContext, client, tokens, config.state)
+			return
+		}
+		relayResult <- hostRoutes.run(runContext, func(relayContext context.Context) error {
+			return runTargetRelayLoopV2(relayContext, client, tokens, config.state)
+		})
+	}()
+	if directRuntime != nil {
+		result := make(chan error, 1)
+		directResult = result
+		go func() {
+			result <- directRuntime.run(runContext, config.state, directVerifier, tokens, hostRoutes, registration.Device.DirectModeEnabled, config.directAccessKey, directV2DeviceMetadata{
+				Name: deviceName, Platform: platform, AgentVersion: version,
+			})
+		}()
+	}
 	select {
 	case <-ctx.Done():
 		cancel()
@@ -228,6 +279,12 @@ func runTarget(ctx context.Context, config targetConfig) error {
 			return nil
 		}
 		return fmt.Errorf("Relay connection loop stopped: %w", err)
+	case err := <-directResult:
+		cancel()
+		if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+			return nil
+		}
+		return fmt.Errorf("direct connection listener stopped: %w", err)
 	}
 }
 

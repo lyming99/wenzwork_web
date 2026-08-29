@@ -155,7 +155,7 @@ func writeDeviceAccessKeyProblem(c *gin.Context, err error) bool {
 	}
 	switch {
 	case errors.Is(err, remoteaccesspolicy.ErrMembershipRequired):
-		writeProblem(c, http.StatusForbidden, "membership_required", "需要有效会员", "只有有效 Pro 会员可以创建或轮换设备接入 Access Key。")
+		writeProblem(c, http.StatusForbidden, "membership_required", "当前套餐未开放设备接入", "请等待 Free 套餐临时开放，或使用已开放远程设备功能的有效会员套餐。")
 	case errors.Is(err, deviceaccesskey.ErrInvalidInput):
 		writeProblem(c, http.StatusBadRequest, "device_access_key_invalid", "设备访问密钥配置无效", "请检查标签、绑定设备与过期时间。")
 	case errors.Is(err, deviceaccesskey.ErrNotFound):

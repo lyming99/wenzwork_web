@@ -96,6 +96,22 @@ func main() {
             _, _ = fmt.Fprintln(file, strings.Join(os.Args[1:], " "))
             _ = file.Close()
         }
+        arguments := strings.Join(os.Args[1:], " ")
+        if strings.HasPrefix(arguments, "container inspect ") {
+            _, _ = fmt.Fprintln(os.Stderr, "Error response from daemon: No such container")
+            os.Exit(1)
+        }
+        if strings.HasPrefix(arguments, "run ") {
+            fmt.Println("test-container-id")
+            return
+        }
+        if strings.Contains(arguments, " pg_isready ") {
+            return
+        }
+        if strings.Contains(arguments, " redis-cli ") {
+            fmt.Println("PONG")
+            return
+        }
         os.Exit(88)
     case "wenzwork-migrate.exe":
         path := os.Getenv("WENZWORK_TEST_MIGRATION_COUNT")
@@ -174,6 +190,22 @@ func main() {
     Assert-True $missingEnvironmentOutput.Contains('Created ') 'Windows initialization did not report creating the missing .env.'
     Assert-True $missingEnvironmentOutput.Contains('Edit ') 'Windows initialization did not ask the operator to edit the new .env.'
     Assert-True (-not (Test-Path -LiteralPath $dockerLog)) 'Windows environment creation unexpectedly invoked Docker.'
+
+    Write-HostEnvironment -IncludeDependencies $false
+    $managedDependenciesLog = Join-Path $testRoot 'managed-dependencies.log'
+    Assert-True ((Invoke-PackageInitialization -LogPath $managedDependenciesLog) -eq 0) 'Windows managed-dependency initialization failed after Docker reported missing containers on stderr.'
+    $managedEnvironment = [IO.File]::ReadAllText((Join-Path $packageRoot '.env'))
+    Assert-True $managedEnvironment.Contains('DATABASE_URL=postgres://wenzwork:') 'Windows managed-dependency initialization did not persist DATABASE_URL.'
+    Assert-True $managedEnvironment.Contains('REDIS_URL=redis://:') 'Windows managed-dependency initialization did not persist REDIS_URL.'
+    $managedDockerLog = [IO.File]::ReadAllText($dockerLog)
+    Assert-True $managedDockerLog.Contains('container inspect wenzwork-postgres') 'Windows initialization did not inspect the managed PostgreSQL container.'
+    Assert-True $managedDockerLog.Contains('container inspect wenzwork-redis') 'Windows initialization did not inspect the managed Redis container.'
+    Assert-True $managedDockerLog.Contains('run -d --name wenzwork-postgres') 'Windows initialization did not create managed PostgreSQL.'
+    Assert-True $managedDockerLog.Contains('run -d --name wenzwork-redis') 'Windows initialization did not create managed Redis.'
+    Assert-True ([IO.File]::ReadAllText($migrationCount).Trim() -ceq '1') 'Windows managed-dependency initialization did not run migrations exactly once.'
+    Remove-Item -LiteralPath (Join-Path $packageRoot 'runtime\state\deployed-version') -Force
+    Remove-Item -LiteralPath $migrationCount -Force
+    Remove-Item -LiteralPath $dockerLog -Force
 
     Write-HostEnvironment -IncludeDependencies $true
     Assert-True ((Invoke-PackageInitialization -LogPath (Join-Path $testRoot 'first.log')) -eq 0) 'First Windows initialization failed.'

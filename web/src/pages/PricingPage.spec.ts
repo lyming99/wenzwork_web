@@ -102,6 +102,9 @@ describe('PricingPage', () => {
         currency: 'CNY',
         billingPeriod: 'free',
         features: ['Local feature'],
+        remoteAccessEnabled: false,
+        deviceLimit: 2,
+        monthlyTrafficLimitGb: null,
       },
       {
         code: 'pro',
@@ -112,6 +115,9 @@ describe('PricingPage', () => {
         currency: 'CNY',
         billingPeriod: 'year',
         features: ['Feature'],
+        remoteAccessEnabled: true,
+        deviceLimit: 10,
+        monthlyTrafficLimitGb: 10,
       },
     ])
     const router = createRouter({

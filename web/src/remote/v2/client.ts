@@ -541,6 +541,15 @@ export const createRemotePeerClientV2 = (
       if (failure instanceof V2CarrierAdmissionError && issued && cachedIssuedLink === issued) {
         cachedIssuedLink = undefined
       }
+      // A direct endpoint is runtime-selected by the Control Plane. Its
+      // short-lived Grant can outlive an account switch back to Relay (or an
+      // Agent restart with a new endpoint), while a browser WebSocket failure
+      // does not expose the HTTP 503 admission response that would otherwise
+      // identify the stale route. Discard a failed cached direct link so the
+      // next attempt asks the Control Plane for the current connection layer.
+      if (issued?.link.connectionMode === 'direct' && cachedIssuedLink === issued && !canResume) {
+        cachedIssuedLink = undefined
+      }
       if (nextCarrier && carrier === nextCarrier) carrier = undefined
       nextCarrier?.close('remote/v2 establishment failed')
       connected.value = false

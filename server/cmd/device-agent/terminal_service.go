@@ -45,12 +45,12 @@ const (
 // it begins accepting user input so the ConPTY byte stream has the same
 // encoding.  This mirrors the local WenzMark/WenzWork terminal launch path.
 const (
-	// The supervised terminal environment intentionally omits ambient process
-	// state. Do not rely on a bare `chcp` command being discoverable through
-	// PATH: an otherwise healthy PowerShell session would print a
-	// CommandNotFoundException before the user types anything. Resolve the
-	// built-in executable explicitly when it exists, and still configure .NET's
-	// UTF-8 streams when it does not.
+	// The supervised terminal environment is an explicit host snapshot rather
+	// than implicit process inheritance. Do not rely on a bare `chcp` command
+	// being discoverable through PATH: an otherwise healthy PowerShell session
+	// would print a CommandNotFoundException before the user types anything.
+	// Resolve the built-in executable explicitly when it exists, and still
+	// configure .NET's UTF-8 streams when it does not.
 	windowsCmdUTF8Bootstrap        = "if exist \"%SystemRoot%\\System32\\chcp.com\" \"%SystemRoot%\\System32\\chcp.com\" 65001 >nul"
 	windowsPowerShellUTF8Bootstrap = "$__wenzworkChcp = [System.IO.Path]::Combine([System.Environment]::SystemDirectory, 'chcp.com'); " +
 		"if ([System.IO.File]::Exists($__wenzworkChcp)) { & $__wenzworkChcp 65001 *> $null }; " +
@@ -224,7 +224,7 @@ func (service *terminalService) OpenContext(ctx context.Context, project registe
 	}
 	process, err := service.supervisor.Start(processLaunchSpec{
 		ProjectID: project.ID, ProjectRoot: project.LocalPath, WorkingDirectory: workingDirectory,
-		Argv: argv, Rows: rows, Columns: columns,
+		Argv: argv, InheritHostEnvironment: true, Rows: rows, Columns: columns,
 		Limits: processResourceLimits{
 			MaximumLifetime: terminalMaximumLifetime, MaximumMemoryBytes: maximumTerminalMemoryBytes,
 			MaximumOutputBytes: maximumInteractiveTerminalOutputBytes,

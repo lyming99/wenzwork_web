@@ -921,6 +921,24 @@ func (e DeviceConnectionScope) Valid() bool {
 	}
 }
 
+// Defines values for DeviceLinkConnectionMode.
+const (
+	DeviceLinkConnectionModeDirect DeviceLinkConnectionMode = "direct"
+	DeviceLinkConnectionModeRelay  DeviceLinkConnectionMode = "relay"
+)
+
+// Valid indicates whether the value is a known member of the DeviceLinkConnectionMode enum.
+func (e DeviceLinkConnectionMode) Valid() bool {
+	switch e {
+	case DeviceLinkConnectionModeDirect:
+		return true
+	case DeviceLinkConnectionModeRelay:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeviceLinkDeviceIdentityAlgorithm.
 const (
 	DeviceLinkDeviceIdentityAlgorithmEd25519 DeviceLinkDeviceIdentityAlgorithm = "Ed25519"
@@ -2781,6 +2799,24 @@ func (e RemoteAccessRequestConfirmation) Valid() bool {
 	}
 }
 
+// Defines values for RemoteDeviceConnectionMode.
+const (
+	RemoteDeviceConnectionModeDirect RemoteDeviceConnectionMode = "direct"
+	RemoteDeviceConnectionModeRelay  RemoteDeviceConnectionMode = "relay"
+)
+
+// Valid indicates whether the value is a known member of the RemoteDeviceConnectionMode enum.
+func (e RemoteDeviceConnectionMode) Valid() bool {
+	switch e {
+	case RemoteDeviceConnectionModeDirect:
+		return true
+	case RemoteDeviceConnectionModeRelay:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RemoteDevicePlatform.
 const (
 	RemoteDevicePlatformLinux   RemoteDevicePlatform = "linux"
@@ -3402,6 +3438,27 @@ func (e StoredReleaseAssetPlatform) Valid() bool {
 	case StoredReleaseAssetPlatformWeb:
 		return true
 	case StoredReleaseAssetPlatformWindows:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SystemEmailSettingsSource.
+const (
+	SystemEmailSettingsSourceDatabase     SystemEmailSettingsSource = "database"
+	SystemEmailSettingsSourceLocal        SystemEmailSettingsSource = "local"
+	SystemEmailSettingsSourceUnconfigured SystemEmailSettingsSource = "unconfigured"
+)
+
+// Valid indicates whether the value is a known member of the SystemEmailSettingsSource enum.
+func (e SystemEmailSettingsSource) Valid() bool {
+	switch e {
+	case SystemEmailSettingsSourceDatabase:
+		return true
+	case SystemEmailSettingsSourceLocal:
+		return true
+	case SystemEmailSettingsSourceUnconfigured:
 		return true
 	default:
 		return false
@@ -4334,27 +4391,36 @@ type AdminMembershipSummary struct {
 
 // AdminPricingPlan defines model for AdminPricingPlan.
 type AdminPricingPlan struct {
-	BillingPeriod         AdminPricingPlanBillingPeriod `json:"billingPeriod"`
-	Code                  string                        `json:"code"`
-	CreatedAt             time.Time                     `json:"createdAt"`
-	Currency              string                        `json:"currency"`
-	Description           string                        `json:"description"`
-	Features              []string                      `json:"features"`
-	HasUnpublishedChanges bool                          `json:"hasUnpublishedChanges"`
-	Id                    openapi_types.UUID            `json:"id"`
-	Name                  string                        `json:"name"`
+	BillingPeriod AdminPricingPlanBillingPeriod `json:"billingPeriod"`
+	Code          string                        `json:"code"`
+	CreatedAt     time.Time                     `json:"createdAt"`
+	Currency      string                        `json:"currency"`
+	Description   string                        `json:"description"`
+
+	// DeviceLimit 该套餐每个账号最多保留的已接入设备凭据数量。
+	DeviceLimit           int                `json:"deviceLimit"`
+	Features              []string           `json:"features"`
+	HasUnpublishedChanges bool               `json:"hasUnpublishedChanges"`
+	Id                    openapi_types.UUID `json:"id"`
+
+	// MonthlyTrafficLimitGb 每账号月流量上限（GB）；null 表示不限流量。当前仅配置，不执行拦截。
+	MonthlyTrafficLimitGb *int64 `json:"monthlyTrafficLimitGb"`
+	Name                  string `json:"name"`
 
 	// OriginalPriceMinor 划线原价；不展示时为 null，配置时必须高于 priceMinor。
 	OriginalPriceMinor *int64 `json:"originalPriceMinor"`
 
 	// PriceMinor 最小货币单位整数；尚未定价时为 null。
-	PriceMinor       *int64                 `json:"priceMinor"`
-	PublishedAt      *time.Time             `json:"publishedAt"`
-	PublishedVersion *int64                 `json:"publishedVersion"`
-	SortOrder        int                    `json:"sortOrder"`
-	Status           AdminPricingPlanStatus `json:"status"`
-	UpdatedAt        time.Time              `json:"updatedAt"`
-	Version          int64                  `json:"version"`
+	PriceMinor       *int64     `json:"priceMinor"`
+	PublishedAt      *time.Time `json:"publishedAt"`
+	PublishedVersion *int64     `json:"publishedVersion"`
+
+	// RemoteAccessEnabled 发布该版本后是否允许此套餐账号使用远程设备；Free 开启后即临时开放普通用户使用。
+	RemoteAccessEnabled bool                   `json:"remoteAccessEnabled"`
+	SortOrder           int                    `json:"sortOrder"`
+	Status              AdminPricingPlanStatus `json:"status"`
+	UpdatedAt           time.Time              `json:"updatedAt"`
+	Version             int64                  `json:"version"`
 }
 
 // AdminPricingPlanBillingPeriod defines model for AdminPricingPlan.BillingPeriod.
@@ -4632,15 +4698,15 @@ type ApplySystemSetupRequest struct {
 	ClearSmtpPassword bool     `json:"clearSmtpPassword"`
 
 	// CookieSecure 显式选择是否为浏览器会话 Cookie 启用 Secure 属性；启用时站点地址必须为 HTTPS。
-	CookieSecure            bool   `json:"cookieSecure"`
-	DatabaseUrl             string `json:"databaseUrl"`
-	DesktopGithubRepository string `json:"desktopGithubRepository"`
-	MailFrom                string `json:"mailFrom"`
-	MobileGithubRepository  string `json:"mobileGithubRepository"`
-	PublicBaseUrl           string `json:"publicBaseUrl"`
-	RedisUrl                string `json:"redisUrl"`
-	RegistrationEnabled     bool   `json:"registrationEnabled"`
-	SmtpHost                string `json:"smtpHost"`
+	CookieSecure            bool    `json:"cookieSecure"`
+	DatabaseUrl             string  `json:"databaseUrl"`
+	DesktopGithubRepository string  `json:"desktopGithubRepository"`
+	MailFrom                *string `json:"mailFrom,omitempty"`
+	MobileGithubRepository  string  `json:"mobileGithubRepository"`
+	PublicBaseUrl           string  `json:"publicBaseUrl"`
+	RedisUrl                string  `json:"redisUrl"`
+	RegistrationEnabled     bool    `json:"registrationEnabled"`
+	SmtpHost                *string `json:"smtpHost,omitempty"`
 
 	// SmtpPassword 省略则保留当前密码；GitHub Release 仓库凭据不在此字段配置，并始终可选。
 	SmtpPassword        *string `json:"smtpPassword,omitempty"`
@@ -4868,13 +4934,18 @@ type CreateAdminPricingPlanRequest struct {
 	Code          string                                     `json:"code"`
 	Currency      string                                     `json:"currency"`
 	Description   string                                     `json:"description"`
+	DeviceLimit   int                                        `json:"deviceLimit"`
 	Features      []string                                   `json:"features"`
-	Name          string                                     `json:"name"`
+
+	// MonthlyTrafficLimitGb 每账号月流量上限（GB）；null 表示不限流量。当前仅配置，不执行拦截。
+	MonthlyTrafficLimitGb *int64 `json:"monthlyTrafficLimitGb"`
+	Name                  string `json:"name"`
 
 	// OriginalPriceMinor 可选划线原价；配置时必须高于 priceMinor。
-	OriginalPriceMinor *int64 `json:"originalPriceMinor"`
-	PriceMinor         *int64 `json:"priceMinor"`
-	SortOrder          int    `json:"sortOrder"`
+	OriginalPriceMinor  *int64 `json:"originalPriceMinor"`
+	PriceMinor          *int64 `json:"priceMinor"`
+	RemoteAccessEnabled bool   `json:"remoteAccessEnabled"`
+	SortOrder           int    `json:"sortOrder"`
 }
 
 // CreateAdminPricingPlanRequestBillingPeriod defines model for CreateAdminPricingPlanRequest.BillingPeriod.
@@ -5090,6 +5161,12 @@ type DeviceConnectionScope string
 
 // DeviceLink defines model for DeviceLink.
 type DeviceLink struct {
+	// ConnectionMode Carrier 使用 Relay 中转或直接连接 Device Agent。
+	ConnectionMode DeviceLinkConnectionMode `json:"connectionMode"`
+
+	// ConnectionUrl 当前连接层的 WebSocket 地址；客户端应优先使用此字段。
+	ConnectionUrl string `json:"connectionUrl"`
+
 	// DeviceConnectionGrant 可复用、PoP 绑定的长期口令；仅写入二进制 CARRIER_HELLO/LINK_INIT，必须配合 Controller 私钥证明。
 	DeviceConnectionGrant    *string                           `json:"deviceConnectionGrant,omitempty"`
 	DeviceIdentityAlgorithm  DeviceLinkDeviceIdentityAlgorithm `json:"deviceIdentityAlgorithm"`
@@ -5107,9 +5184,15 @@ type DeviceLink struct {
 	MaximumLifetimeSeconds int                `json:"maximumLifetimeSeconds"`
 	RelayCellId            openapi_types.UUID `json:"relayCellId"`
 	RelayNodeId            openapi_types.UUID `json:"relayNodeId"`
-	RelayUrl               string             `json:"relayUrl"`
-	TargetConnectionEpoch  int64              `json:"targetConnectionEpoch"`
+
+	// RelayUrl 兼容旧 remote/v2 客户端的连接地址别名；直连模式下同样等于 connectionUrl。
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	RelayUrl              string `json:"relayUrl"`
+	TargetConnectionEpoch int64  `json:"targetConnectionEpoch"`
 }
+
+// DeviceLinkConnectionMode Carrier 使用 Relay 中转或直接连接 Device Agent。
+type DeviceLinkConnectionMode string
 
 // DeviceLinkDeviceIdentityAlgorithm defines model for DeviceLink.DeviceIdentityAlgorithm.
 type DeviceLinkDeviceIdentityAlgorithm string
@@ -5539,16 +5622,25 @@ type PricingPlan struct {
 	Code          string                   `json:"code"`
 
 	// Currency Examples: CNY
-	Currency    string   `json:"currency"`
-	Description string   `json:"description"`
+	Currency    string `json:"currency"`
+	Description string `json:"description"`
+
+	// DeviceLimit 该套餐每个账号最多保留的已接入设备凭据数量。
+	DeviceLimit int      `json:"deviceLimit"`
 	Features    []string `json:"features"`
-	Name        string   `json:"name"`
+
+	// MonthlyTrafficLimitGb 每账号月流量上限（GB）；null 表示不限流量。当前仅保存和展示，尚未执行流量拦截。
+	MonthlyTrafficLimitGb *int64 `json:"monthlyTrafficLimitGb"`
+	Name                  string `json:"name"`
 
 	// OriginalPriceMinor 划线原价的最小货币单位整数；不展示原价时为 null，配置时必须高于 priceMinor。
 	OriginalPriceMinor *int64 `json:"originalPriceMinor"`
 
 	// PriceMinor 最小货币单位整数；尚未定价时为 null。
 	PriceMinor *int64 `json:"priceMinor"`
+
+	// RemoteAccessEnabled 当前已发布套餐是否允许使用远程设备；Free 开启后，普通注册用户可临时使用。
+	RemoteAccessEnabled bool `json:"remoteAccessEnabled"`
 }
 
 // PricingPlanBillingPeriod defines model for PricingPlan.BillingPeriod.
@@ -5708,9 +5800,22 @@ type RegisterBrowserControllerRequestScopes string
 
 // RegisterRemoteDeviceRequest defines model for RegisterRemoteDeviceRequest.
 type RegisterRemoteDeviceRequest struct {
-	AgentVersion      string                                       `json:"agentVersion"`
-	Capabilities      *[]string                                    `json:"capabilities,omitempty"`
-	DeviceName        string                                       `json:"deviceName"`
+	AgentVersion string    `json:"agentVersion"`
+	Capabilities *[]string `json:"capabilities,omitempty"`
+	DeviceName   string    `json:"deviceName"`
+
+	// DirectConnectionEpoch 直连关闭时为 0；每次启动监听器时由 Agent 单调递增。
+	DirectConnectionEpoch *int64 `json:"directConnectionEpoch,omitempty"`
+
+	// DirectEnabled Device Agent 是否已成功绑定直连监听器。
+	DirectEnabled *bool `json:"directEnabled,omitempty"`
+
+	// DirectIp 直连关闭时省略或传空字符串；开启时必须是可连接的单播 IP。
+	DirectIp   *string `json:"directIp,omitempty"`
+	DirectPort *int    `json:"directPort,omitempty"`
+
+	// DirectTlsEnabled 直连监听器是否已加载与 directIp 匹配的 TLS 证书并提供 WSS。
+	DirectTlsEnabled  *bool                                        `json:"directTlsEnabled,omitempty"`
 	IdentityAlgorithm RegisterRemoteDeviceRequestIdentityAlgorithm `json:"identityAlgorithm"`
 	IdentityPublicKey string                                       `json:"identityPublicKey"`
 	Platform          RegisterRemoteDeviceRequestPlatform          `json:"platform"`
@@ -5733,9 +5838,12 @@ type RegisterRemoteDeviceRequestProtocolMin int
 
 // RegisterRemoteDeviceResponse defines model for RegisterRemoteDeviceResponse.
 type RegisterRemoteDeviceResponse struct {
-	ApprovalRequired    bool         `json:"approvalRequired"`
-	Device              RemoteDevice `json:"device"`
-	PublicKeyThumbprint string       `json:"publicKeyThumbprint"`
+	ApprovalRequired bool         `json:"approvalRequired"`
+	Device           RemoteDevice `json:"device"`
+
+	// DeviceLinkGrantTrust 仅在 Agent 启用直连时返回，用于验证直连 Carrier 与 LINK_INIT 携带的授权。
+	DeviceLinkGrantTrust *DeviceLinkGrantTrustBundle `json:"deviceLinkGrantTrust,omitempty"`
+	PublicKeyThumbprint  string                      `json:"publicKeyThumbprint"`
 }
 
 // RegisterRequest defines model for RegisterRequest.
@@ -6537,7 +6645,7 @@ type ReleaseSourceSettingsList struct {
 
 // RemoteAccessPolicySettings defines model for RemoteAccessPolicySettings.
 type RemoteAccessPolicySettings struct {
-	// DeviceLimit 每个账号最多保留的已接入设备凭据数量；默认值为 10。
+	// DeviceLimit 旧版全局设备上限；新运行时按已发布价格套餐的 deviceLimit 执行。
 	DeviceLimit int       `json:"deviceLimit"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 	Version     int64     `json:"version"`
@@ -6554,9 +6662,25 @@ type RemoteAccessRequestConfirmation string
 
 // RemoteDevice defines model for RemoteDevice.
 type RemoteDevice struct {
-	AgentVersion         string               `json:"agentVersion"`
-	Capabilities         []string             `json:"capabilities"`
-	DeviceName           string               `json:"deviceName"`
+	AgentVersion string   `json:"agentVersion"`
+	Capabilities []string `json:"capabilities"`
+
+	// ConnectionMode 当前账户为该设备选择的 Carrier 连接层。
+	ConnectionMode RemoteDeviceConnectionMode `json:"connectionMode"`
+	DeviceName     string                     `json:"deviceName"`
+
+	// DirectAvailable Agent 已上报直连端点且最近 45 秒内持续心跳。
+	DirectAvailable bool `json:"directAvailable"`
+
+	// DirectIp Agent 配置并上报的 IPv4 或 IPv6 地址；未开启监听时为 null。
+	DirectIp *string `json:"directIp"`
+
+	// DirectModeEnabled 账户是否明确选择直连；与 Agent 是否已开启监听分开保存。
+	DirectModeEnabled bool `json:"directModeEnabled"`
+	DirectPort        *int `json:"directPort"`
+
+	// DirectTlsEnabled 直连入口是否使用配置证书提供 WSS。
+	DirectTlsEnabled     bool                 `json:"directTlsEnabled"`
 	GrantVersion         int64                `json:"grantVersion"`
 	Id                   openapi_types.UUID   `json:"id"`
 	InstallationDeviceId openapi_types.UUID   `json:"installationDeviceId"`
@@ -6569,8 +6693,25 @@ type RemoteDevice struct {
 	Status               RemoteDeviceStatus   `json:"status"`
 }
 
+// RemoteDeviceConnectionMode 当前账户为该设备选择的 Carrier 连接层。
+type RemoteDeviceConnectionMode string
+
 // RemoteDevicePlatform defines model for RemoteDevice.Platform.
 type RemoteDevicePlatform string
+
+// RemoteDeviceDirectHeartbeatRequest defines model for RemoteDeviceDirectHeartbeatRequest.
+type RemoteDeviceDirectHeartbeatRequest struct {
+	ConnectionEpoch int64  `json:"connectionEpoch"`
+	Ip              string `json:"ip"`
+	Port            int    `json:"port"`
+	TlsEnabled      bool   `json:"tlsEnabled"`
+}
+
+// RemoteDeviceDirectHeartbeatResponse defines model for RemoteDeviceDirectHeartbeatResponse.
+type RemoteDeviceDirectHeartbeatResponse struct {
+	// Enabled 当前账户是否仍启用该设备的 IP 直连模式。
+	Enabled bool `json:"enabled"`
+}
 
 // RemoteDeviceList defines model for RemoteDeviceList.
 type RemoteDeviceList struct {
@@ -6590,6 +6731,9 @@ type RemoteDeviceStatus string
 // RemoteDeviceUpdateRequest defines model for RemoteDeviceUpdateRequest.
 type RemoteDeviceUpdateRequest struct {
 	DeviceName string `json:"deviceName"`
+
+	// DirectModeEnabled true 时要求 Agent 直连端点当前有有效心跳；false 恢复 Relay 中转模式。
+	DirectModeEnabled *bool `json:"directModeEnabled,omitempty"`
 }
 
 // RemotePresenceStatus defines model for RemotePresenceStatus.
@@ -6690,6 +6834,11 @@ type RemoteTaskStatus string
 type ResetPasswordRequest struct {
 	NewPassword string `json:"newPassword"`
 	Token       string `json:"token"`
+}
+
+// ResetSystemEmailSettingsRequest defines model for ResetSystemEmailSettingsRequest.
+type ResetSystemEmailSettingsRequest struct {
+	ExpectedVersion int64 `json:"expectedVersion"`
 }
 
 // RevokeAppTokenRequest defines model for RevokeAppTokenRequest.
@@ -6890,6 +7039,22 @@ type StoredReleaseAssetArchitecture string
 // StoredReleaseAssetPlatform defines model for StoredReleaseAsset.Platform.
 type StoredReleaseAssetPlatform string
 
+// SystemEmailSettings defines model for SystemEmailSettings.
+type SystemEmailSettings struct {
+	Configured             bool                      `json:"configured"`
+	MailFrom               string                    `json:"mailFrom"`
+	SmtpHost               string                    `json:"smtpHost"`
+	SmtpPasswordConfigured bool                      `json:"smtpPasswordConfigured"`
+	SmtpPort               int                       `json:"smtpPort"`
+	SmtpUser               string                    `json:"smtpUser"`
+	Source                 SystemEmailSettingsSource `json:"source"`
+	UpdatedAt              time.Time                 `json:"updatedAt"`
+	Version                int64                     `json:"version"`
+}
+
+// SystemEmailSettingsSource defines model for SystemEmailSettings.Source.
+type SystemEmailSettingsSource string
+
 // SystemSetupApplyResponse defines model for SystemSetupApplyResponse.
 type SystemSetupApplyResponse struct {
 	RestartRequired bool                `json:"restartRequired"`
@@ -6912,11 +7077,23 @@ type SystemSetupSettings struct {
 	RedisUrl                string `json:"redisUrl"`
 	RegistrationEnabled     bool   `json:"registrationEnabled"`
 	Required                bool   `json:"required"`
+	SmtpConfigured          bool   `json:"smtpConfigured"`
 	SmtpHost                string `json:"smtpHost"`
 	SmtpPasswordConfigured  bool   `json:"smtpPasswordConfigured"`
 	SmtpPort                int    `json:"smtpPort"`
 	SmtpUser                string `json:"smtpUser"`
 	WebGithubRepository     string `json:"webGithubRepository"`
+}
+
+// TestSystemEmailSettingsRequest defines model for TestSystemEmailSettingsRequest.
+type TestSystemEmailSettingsRequest struct {
+	ClearSmtpPassword bool                `json:"clearSmtpPassword"`
+	MailFrom          string              `json:"mailFrom"`
+	Recipient         openapi_types.Email `json:"recipient"`
+	SmtpHost          string              `json:"smtpHost"`
+	SmtpPassword      *string             `json:"smtpPassword,omitempty"`
+	SmtpPort          int                 `json:"smtpPort"`
+	SmtpUser          string              `json:"smtpUser"`
 }
 
 // TokenRequest defines model for TokenRequest.
@@ -7016,14 +7193,19 @@ type UpdateAdminPricingPlanRequest struct {
 	ConfirmPriceChange bool     `json:"confirmPriceChange"`
 	Currency           string   `json:"currency"`
 	Description        string   `json:"description"`
+	DeviceLimit        int      `json:"deviceLimit"`
 	ExpectedVersion    int64    `json:"expectedVersion"`
 	Features           []string `json:"features"`
-	Name               string   `json:"name"`
+
+	// MonthlyTrafficLimitGb 每账号月流量上限（GB）；null 表示不限流量。当前仅配置，不执行拦截。
+	MonthlyTrafficLimitGb *int64 `json:"monthlyTrafficLimitGb"`
+	Name                  string `json:"name"`
 
 	// OriginalPriceMinor 可选划线原价；配置时必须高于 priceMinor。
-	OriginalPriceMinor *int64 `json:"originalPriceMinor"`
-	PriceMinor         *int64 `json:"priceMinor"`
-	SortOrder          int    `json:"sortOrder"`
+	OriginalPriceMinor  *int64 `json:"originalPriceMinor"`
+	PriceMinor          *int64 `json:"priceMinor"`
+	RemoteAccessEnabled bool   `json:"remoteAccessEnabled"`
+	SortOrder           int    `json:"sortOrder"`
 }
 
 // UpdateAdminPricingPlanRequestBillingPeriod defines model for UpdateAdminPricingPlanRequest.BillingPeriod.
@@ -7122,6 +7304,17 @@ type UpdateReleaseSourceSettingsRequestProject string
 type UpdateRemoteAccessPolicyRequest struct {
 	DeviceLimit     int   `json:"deviceLimit"`
 	ExpectedVersion int64 `json:"expectedVersion"`
+}
+
+// UpdateSystemEmailSettingsRequest defines model for UpdateSystemEmailSettingsRequest.
+type UpdateSystemEmailSettingsRequest struct {
+	ClearSmtpPassword bool    `json:"clearSmtpPassword"`
+	ExpectedVersion   int64   `json:"expectedVersion"`
+	MailFrom          string  `json:"mailFrom"`
+	SmtpHost          string  `json:"smtpHost"`
+	SmtpPassword      *string `json:"smtpPassword,omitempty"`
+	SmtpPort          int     `json:"smtpPort"`
+	SmtpUser          string  `json:"smtpUser"`
 }
 
 // UpdateTrialPromotionRequest defines model for UpdateTrialPromotionRequest.
@@ -7670,7 +7863,18 @@ type CreateAdminReleaseJSONRequestBody = SaveAdminReleaseRequest
 type UpdateAdminReleaseJSONRequestBody = SaveAdminReleaseRequest
 
 // UpdateRemoteAccessPolicyJSONRequestBody defines body for UpdateRemoteAccessPolicy for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 type UpdateRemoteAccessPolicyJSONRequestBody = UpdateRemoteAccessPolicyRequest
+
+// UpdateSystemEmailSettingsJSONRequestBody defines body for UpdateSystemEmailSettings for application/json ContentType.
+type UpdateSystemEmailSettingsJSONRequestBody = UpdateSystemEmailSettingsRequest
+
+// ResetSystemEmailSettingsJSONRequestBody defines body for ResetSystemEmailSettings for application/json ContentType.
+type ResetSystemEmailSettingsJSONRequestBody = ResetSystemEmailSettingsRequest
+
+// TestSystemEmailSettingsJSONRequestBody defines body for TestSystemEmailSettings for application/json ContentType.
+type TestSystemEmailSettingsJSONRequestBody = TestSystemEmailSettingsRequest
 
 // ApplySystemSetupJSONRequestBody defines body for ApplySystemSetup for application/json ContentType.
 type ApplySystemSetupJSONRequestBody = ApplySystemSetupRequest
@@ -7713,6 +7917,9 @@ type VerifyAccountEmailJSONRequestBody = TokenRequest
 
 // BootstrapRemoteDeviceWithAccessKeyJSONRequestBody defines body for BootstrapRemoteDeviceWithAccessKey for application/json ContentType.
 type BootstrapRemoteDeviceWithAccessKeyJSONRequestBody = BootstrapRemoteDeviceRequest
+
+// HeartbeatRemoteDeviceDirectEndpointJSONRequestBody defines body for HeartbeatRemoteDeviceDirectEndpoint for application/json ContentType.
+type HeartbeatRemoteDeviceDirectEndpointJSONRequestBody = RemoteDeviceDirectHeartbeatRequest
 
 // RotateRemoteDeviceKeyJSONRequestBody defines body for RotateRemoteDeviceKey for application/json ContentType.
 type RotateRemoteDeviceKeyJSONRequestBody = RotateRemoteDeviceKeyRequest

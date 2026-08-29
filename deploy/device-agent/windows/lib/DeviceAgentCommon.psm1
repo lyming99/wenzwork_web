@@ -262,7 +262,7 @@ function Assert-AgentEnvironmentFile {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf) -or ((Get-Item -LiteralPath $Path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
         throw 'Device Agent environment must be a regular file.'
     }
-    $allowed = @('WENZWORK_CONTROL_URL', 'WENZWORK_DEVICE_ACCESS_KEY', 'WENZWORK_DEVICE_STATE_FILE', 'WENZWORK_DEVICE_WORKSPACE', 'WENZWORK_AGENT_SECRET_STORE', 'WENZWORK_AGENT_FEATURE_FLAGS', 'WENZWORK_DEVICE_TLS_CA_FILE')
+    $allowed = @('WENZWORK_CONTROL_URL', 'WENZWORK_DEVICE_ACCESS_KEY', 'WENZWORK_DEVICE_STATE_FILE', 'WENZWORK_DEVICE_WORKSPACE', 'WENZWORK_AGENT_SECRET_STORE', 'WENZWORK_AGENT_FEATURE_FLAGS', 'WENZWORK_DEVICE_TLS_CA_FILE', 'WENZWORK_DEVICE_DIRECT_ENABLED', 'WENZWORK_DEVICE_DIRECT_IP', 'WENZWORK_DEVICE_DIRECT_PORT', 'WENZWORK_DEVICE_DIRECT_ACCESS_KEY', 'WENZWORK_DEVICE_DIRECT_TLS_CERT_FILE', 'WENZWORK_DEVICE_DIRECT_TLS_KEY_FILE')
     $values = @{}
     foreach ($line in [IO.File]::ReadAllLines($Path)) {
         if ([string]::IsNullOrWhiteSpace($line) -or $line.TrimStart().StartsWith('#')) { continue }
@@ -277,6 +277,7 @@ function Assert-AgentEnvironmentFile {
     }
     [void](Assert-AgentNetworkUrl -Url $values.WENZWORK_CONTROL_URL)
     if ($values.WENZWORK_DEVICE_ACCESS_KEY -notmatch '^device_[A-Za-z0-9_-]{43}$') { throw 'Device Access Key is invalid.' }
+    if ($values.ContainsKey('WENZWORK_DEVICE_DIRECT_ACCESS_KEY') -and $values.WENZWORK_DEVICE_DIRECT_ACCESS_KEY -notmatch '^device_[A-Za-z0-9_-]{43}$') { throw 'Device direct Access Key is invalid.' }
     $actualState = [IO.Path]::GetFullPath($values.WENZWORK_DEVICE_STATE_FILE)
     $expectedState = [IO.Path]::GetFullPath($ExpectedStatePath)
     if (-not $actualState.Equals($expectedState, [StringComparison]::OrdinalIgnoreCase)) { throw "State file must be $expectedState." }

@@ -68,8 +68,10 @@ const installerMessage = ref('')
 const inspectedDevice = ref<RemoteDevice | null>(null)
 const editingDevice = ref<RemoteDevice | null>(null)
 const editedDeviceName = ref('')
+const editedDirectModeEnabled = ref(false)
 const editError = ref('')
 const deviceActionMessage = ref('')
+const securePage = typeof window !== 'undefined' && window.location.protocol === 'https:'
 
 const onlineCount = computed(
   () => devices.value.filter((device) => device.presence === 'online').length,
@@ -91,6 +93,9 @@ const filteredDevices = computed(() => {
       device.presence,
       presenceLabel(device),
       device.installationDeviceId,
+      device.connectionMode,
+      device.directIp ?? '',
+      device.directPort?.toString() ?? '',
     ].some((value) => value.toLocaleLowerCase('zh-CN').includes(query)),
   )
 })
@@ -115,6 +120,17 @@ const presenceLabel = (device: RemoteDevice) => {
   if (device.status === 'revoked') return '已吊销'
   if (device.status !== 'active') return '未启用'
   return { online: '在线', offline: '离线', degraded: '连接不稳定' }[device.presence]
+}
+
+const connectionModeLabel = (device: RemoteDevice) => {
+  if (!device.directModeEnabled) return 'Relay 中转'
+  return device.directAvailable ? 'IP 直连' : '直连不可用'
+}
+
+const directEndpointLabel = (device: RemoteDevice) => {
+  if (!device.directIp || !device.directPort) return 'Agent 未开启'
+  const host = device.directIp.includes(':') ? `[${device.directIp}]` : device.directIp
+  return `${device.directTlsEnabled ? 'wss' : 'ws'}://${host}:${device.directPort}`
 }
 
 const load = async (append = false) => {
@@ -192,6 +208,7 @@ const showDeviceInfo = (device: RemoteDevice) => {
 const beginDeviceEdit = (device: RemoteDevice) => {
   editingDevice.value = device
   editedDeviceName.value = device.deviceName
+  editedDirectModeEnabled.value = device.directModeEnabled
   editError.value = ''
 }
 
@@ -207,18 +224,32 @@ const saveDeviceName = async () => {
     editError.value = '设备名称不能超过 120 个字符。'
     return
   }
-  if (deviceName === current.deviceName) {
+  if (editedDirectModeEnabled.value && !current.directAvailable && !current.directModeEnabled) {
+    editError.value = 'Device Agent 尚未上报可用的直连 IP 和端口。'
+    return
+  }
+  if (
+    deviceName === current.deviceName &&
+    editedDirectModeEnabled.value === current.directModeEnabled
+  ) {
     editingDevice.value = null
     return
   }
   updatingDeviceId.value = current.id
+  const modeChanged = editedDirectModeEnabled.value !== current.directModeEnabled
   editError.value = ''
   try {
-    const updated = await updateRemoteDevice(current.id, deviceName)
+    const updated = modeChanged
+      ? await updateRemoteDevice(current.id, deviceName, editedDirectModeEnabled.value)
+      : await updateRemoteDevice(current.id, deviceName)
     devices.value = devices.value.map((device) => (device.id === updated.id ? updated : device))
     if (inspectedDevice.value?.id === updated.id) inspectedDevice.value = updated
     editingDevice.value = null
-    deviceActionMessage.value = '设备名称已修改。'
+    deviceActionMessage.value = modeChanged
+      ? updated.directModeEnabled
+        ? '设备已切换为 IP 直连模式。'
+        : '设备已切换为 Relay 中转模式。'
+      : '设备名称已修改。'
   } catch (error) {
     editError.value = problemMessage(error, '无法修改设备，请稍后重试。')
   } finally {
@@ -392,8 +423,8 @@ onMounted(() => {
           <h2>设备接入 Access Key</h2>
           <p>
             Key 仅用于设备向管理端交换短期凭证，不会发送给
-            Relay；明文仅在创建、轮换或原请求安全重试时返回。仅有效 Pro
-            会员可以接入设备，每账号默认上限为 10 台，实际上限以管理员策略为准。
+            Relay；明文仅在创建、轮换或原请求安全重试时返回。Free 临时开放期间普通会员也可使用，
+            设备数量上限以当前套餐配置为准。
           </p>
         </div>
       </div>
@@ -546,8 +577,8 @@ onMounted(() => {
               <dd>{{ formatDate(device.lastSeenAt) }}</dd>
             </div>
             <div>
-              <dt>远程访问</dt>
-              <dd>{{ device.remoteEnabledAt ? '已开启' : '未开启' }}</dd>
+              <dt>连接方式</dt>
+              <dd>{{ connectionModeLabel(device) }}</dd>
             </div>
           </dl>
           <span class="device-open">打开远程工作台 →</span>
@@ -624,6 +655,16 @@ onMounted(() => {
             <dt>远程访问</dt>
             <dd>{{ inspectedDevice.remoteEnabledAt ? '已启用' : '未启用' }}</dd>
           </div>
+          <div>
+            <dt>连接方式</dt>
+            <dd>{{ connectionModeLabel(inspectedDevice) }}</dd>
+          </div>
+          <div>
+            <dt>直连端点</dt>
+            <dd>
+              <code>{{ directEndpointLabel(inspectedDevice) }}</code>
+            </dd>
+          </div>
         </dl>
         <div v-if="inspectedDevice.capabilities.length" class="device-capabilities">
           <strong>设备声明的能力</strong>
@@ -663,12 +704,54 @@ onMounted(() => {
       >
         <div>
           <p class="section-kicker">修改设备</p>
-          <h2 id="device-edit-title">设置设备显示名称</h2>
+          <h2 id="device-edit-title">设备名称与连接方式</h2>
         </div>
         <label>
           <span>设备名称</span>
           <input v-model="editedDeviceName" maxlength="120" autocomplete="off" autofocus />
         </label>
+        <section class="device-connection-setting" aria-labelledby="device-connection-title">
+          <div>
+            <strong id="device-connection-title">IP 直连模式</strong>
+            <p>
+              开启后，工作台通过 Agent 配置的 IP 和端口建立 Carrier；文件、终端、任务与 AI
+              仍使用同一条端到端加密 Link。
+            </p>
+          </div>
+          <label class="device-direct-toggle">
+            <input
+              v-model="editedDirectModeEnabled"
+              type="checkbox"
+              :disabled="!editingDevice.directAvailable && !editingDevice.directModeEnabled"
+            />
+            <span>{{ editedDirectModeEnabled ? '已开启' : '使用 Relay' }}</span>
+          </label>
+          <dl>
+            <div>
+              <dt>Agent 直连端点</dt>
+              <dd>
+                <code>{{ directEndpointLabel(editingDevice) }}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>监听状态</dt>
+              <dd>{{ editingDevice.directAvailable ? '心跳在线' : '不可用' }}</dd>
+            </div>
+          </dl>
+          <p v-if="!editingDevice.directAvailable" class="device-direct-hint">
+            请在 Device Agent 的 .env 中设置
+            <code>WENZWORK_DEVICE_DIRECT_ENABLED=true</code>、
+            <code>WENZWORK_DEVICE_DIRECT_IP</code> 和 <code>WENZWORK_DEVICE_DIRECT_PORT</code>，重启
+            Agent 后再开启。
+          </p>
+          <p
+            v-else-if="editedDirectModeEnabled && securePage && !editingDevice.directTlsEnabled"
+            class="device-direct-hint warning"
+          >
+            浏览器会阻止 HTTPS 页面访问普通 ws:// IP。请使用 HTTP 管理页，或在 Agent 配置受信任的 IP
+            证书以启用 WSS。
+          </p>
+        </section>
         <p v-if="editError" class="form-message form-error" role="alert">{{ editError }}</p>
         <div class="device-dialog-actions">
           <button class="button button-secondary" type="button" @click="editingDevice = null">
@@ -1186,6 +1269,62 @@ onMounted(() => {
 .device-edit-dialog input {
   min-height: 46px;
   padding: 0 13px;
+}
+.device-connection-setting {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--paper-soft);
+}
+.device-connection-setting strong {
+  display: block;
+  margin-bottom: 5px;
+}
+.device-connection-setting p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+.device-direct-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 700;
+}
+.device-edit-dialog .device-direct-toggle input {
+  width: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--teal);
+}
+.device-connection-setting dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.device-connection-setting dl > div {
+  display: grid;
+  gap: 4px;
+}
+.device-connection-setting dt {
+  color: var(--ink-faint);
+  font-size: 0.78rem;
+}
+.device-connection-setting dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  font-size: 0.84rem;
+}
+.device-direct-hint code {
+  color: var(--ink);
+}
+.device-connection-setting .device-direct-hint.warning {
+  color: #8a5a13;
 }
 .device-edit-dialog .form-message,
 .device-edit-dialog .device-dialog-actions {

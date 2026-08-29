@@ -83,15 +83,19 @@ func (f *fakeReleaseAssetDownloadService) GitHubRedirect(_ context.Context, inpu
 func TestPricingPlansReturnsPublishedCatalogShape(t *testing.T) {
 	zero := int64(0)
 	original := int64(5900)
+	trafficLimit := int64(10)
 	router := newCatalogTestRouter(&fakeCatalogReader{plans: []catalog.PricingPlan{{
-		Code:               "free",
-		Name:               "Free",
-		Description:        "Start writing",
-		PriceMinor:         &zero,
-		OriginalPriceMinor: &original,
-		Currency:           "CNY",
-		BillingPeriod:      "free",
-		Features:           []string{"Markdown"},
+		Code:                  "free",
+		Name:                  "Free",
+		Description:           "Start writing",
+		PriceMinor:            &zero,
+		OriginalPriceMinor:    &original,
+		Currency:              "CNY",
+		BillingPeriod:         "free",
+		Features:              []string{"Markdown"},
+		RemoteAccessEnabled:   true,
+		DeviceLimit:           3,
+		MonthlyTrafficLimitGB: &trafficLimit,
 	}}})
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/pricing-plans", nil)
 	response := httptest.NewRecorder()
@@ -104,7 +108,7 @@ func TestPricingPlansReturnsPublishedCatalogShape(t *testing.T) {
 	if response.Header().Get("Cache-Control") != publicCacheControl {
 		t.Fatalf("Cache-Control = %q", response.Header().Get("Cache-Control"))
 	}
-	for _, expected := range []string{`"items"`, `"code":"free"`, `"priceMinor":0`, `"originalPriceMinor":5900`, `"features":["Markdown"]`} {
+	for _, expected := range []string{`"items"`, `"code":"free"`, `"priceMinor":0`, `"originalPriceMinor":5900`, `"features":["Markdown"]`, `"remoteAccessEnabled":true`, `"deviceLimit":3`, `"monthlyTrafficLimitGb":10`} {
 		if !strings.Contains(response.Body.String(), expected) {
 			t.Fatalf("body = %s, want %s", response.Body.String(), expected)
 		}

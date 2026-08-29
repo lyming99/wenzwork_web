@@ -364,7 +364,7 @@ agent_atomic_symlink() {
 }
 
 agent_validate_env_file() {
-  local path=$1 expected_state=$2 key value state_seen=0 control_seen=0 access_seen=0
+  local path=$1 expected_state=$2 key value state_seen=0 control_seen=0 access_seen=0 direct_access_seen=0
   [[ -f $path && ! -L $path ]] || agent_die "Device Agent environment file must be a regular file"
   while IFS= read -r line || [[ -n $line ]]; do
     [[ -z $line || $line =~ ^[[:space:]]*# ]] && continue
@@ -377,9 +377,12 @@ agent_validate_env_file() {
         ((control_seen += 1)); agent_validate_url "$value" ;;
       WENZWORK_DEVICE_ACCESS_KEY)
         ((access_seen += 1)); [[ $value =~ ^device_[A-Za-z0-9_-]{43}$ ]] || agent_die "Device Access Key is invalid" ;;
+      WENZWORK_DEVICE_DIRECT_ACCESS_KEY)
+        ((direct_access_seen += 1)); [[ $direct_access_seen -eq 1 ]] || agent_die "Device direct Access Key is duplicated"
+        [[ $value =~ ^device_[A-Za-z0-9_-]{43}$ ]] || agent_die "Device direct Access Key is invalid" ;;
       WENZWORK_DEVICE_STATE_FILE)
         ((state_seen += 1)); [[ $value == "$expected_state" ]] || agent_die "state file must be $expected_state" ;;
-      WENZWORK_DEVICE_WORKSPACE|WENZWORK_AGENT_SECRET_STORE|WENZWORK_AGENT_FEATURE_FLAGS|WENZWORK_DEVICE_TLS_CA_FILE)
+      WENZWORK_DEVICE_WORKSPACE|WENZWORK_AGENT_SECRET_STORE|WENZWORK_AGENT_FEATURE_FLAGS|WENZWORK_DEVICE_TLS_CA_FILE|WENZWORK_DEVICE_DIRECT_ENABLED|WENZWORK_DEVICE_DIRECT_IP|WENZWORK_DEVICE_DIRECT_PORT|WENZWORK_DEVICE_DIRECT_TLS_CERT_FILE|WENZWORK_DEVICE_DIRECT_TLS_KEY_FILE)
         ;;
       *) agent_die "Device Agent environment key is not allowed: $key" ;;
     esac

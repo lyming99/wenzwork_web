@@ -5,13 +5,10 @@ import { computed, onMounted, ref } from 'vue'
 import {
   cancelAdminUserMembership,
   createAdminUser,
-  getRemoteAccessPolicy,
   listAdminUsers,
   setAdminUserMembership,
-  updateRemoteAccessPolicy,
   updateAdminUserStatus,
   type AdminUser,
-  type RemoteAccessPolicySettings,
 } from '@/api/admin'
 import { problemMessage } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
@@ -36,9 +33,6 @@ const membershipTarget = ref<AdminUser | null>(null)
 const membershipLifetime = ref(false)
 const membershipExpiresAt = ref('')
 const membershipReason = ref('')
-const accessPolicy = ref<RemoteAccessPolicySettings | null>(null)
-const policyDeviceLimit = ref(10)
-const policyPending = ref(false)
 
 const canManageUsers = computed(() => auth.hasPermission('admin.users.manage'))
 const canManageMemberships = computed(() => auth.hasPermission('admin.memberships.manage'))
@@ -50,13 +44,6 @@ const canCreate = computed(
 )
 const canSaveMembership = computed(
   () => membershipLifetime.value || Boolean(membershipExpiresAt.value),
-)
-const canSaveAccessPolicy = computed(
-  () =>
-    Boolean(accessPolicy.value) &&
-    Number.isInteger(policyDeviceLimit.value) &&
-    policyDeviceLimit.value >= 1 &&
-    policyDeviceLimit.value <= 100000,
 )
 
 const formatDate = (value: string) =>
@@ -82,35 +69,6 @@ const load = async () => {
     errorMessage.value = problemMessage(error, '暂时无法读取账户列表。')
   } finally {
     loading.value = false
-  }
-}
-
-const loadAccessPolicy = async () => {
-  try {
-    accessPolicy.value = await getRemoteAccessPolicy()
-    policyDeviceLimit.value = accessPolicy.value.deviceLimit
-  } catch (error) {
-    errorMessage.value = problemMessage(error, '暂时无法读取设备接入策略。')
-  }
-}
-
-const saveAccessPolicy = async () => {
-  if (!accessPolicy.value || !canSaveAccessPolicy.value) return
-  policyPending.value = true
-  errorMessage.value = ''
-  message.value = ''
-  try {
-    accessPolicy.value = await updateRemoteAccessPolicy({
-      deviceLimit: policyDeviceLimit.value,
-      expectedVersion: accessPolicy.value.version,
-    })
-    policyDeviceLimit.value = accessPolicy.value.deviceLimit
-    message.value = `设备接入上限已调整为每个账号 ${accessPolicy.value.deviceLimit} 台，并已立即生效。`
-  } catch (error) {
-    errorMessage.value = problemMessage(error, '暂时无法更新设备接入策略。')
-    await loadAccessPolicy()
-  } finally {
-    policyPending.value = false
   }
 }
 
@@ -213,10 +171,7 @@ const cancelMembership = async (user: AdminUser) => {
   }
 }
 
-onMounted(async () => {
-  await load()
-  if (canManageMemberships.value) await loadAccessPolicy()
-})
+onMounted(load)
 </script>
 
 <template>
@@ -226,46 +181,6 @@ onMounted(async () => {
     <p class="dashboard-lead">创建可登录账户、调整 Pro 会员有效期，并在需要时立即禁用账户。</p>
     <p v-if="errorMessage" class="form-message form-error" role="alert">{{ errorMessage }}</p>
     <p v-if="message" class="form-message form-success" role="status">{{ message }}</p>
-
-    <form
-      v-if="canManageMemberships"
-      class="dashboard-card admin-create-form"
-      @submit.prevent="saveAccessPolicy"
-    >
-      <div class="batch-form-heading">
-        <div>
-          <p class="card-label">设备接入策略</p>
-          <h2>每账号设备上限</h2>
-        </div>
-        <span class="tag">仅有效 Pro 会员可接入</span>
-      </div>
-      <div class="form-grid admin-user-create-grid">
-        <div class="field-group">
-          <label for="remote-device-limit">最多接入设备数</label>
-          <input
-            id="remote-device-limit"
-            v-model.number="policyDeviceLimit"
-            type="number"
-            min="1"
-            max="100000"
-            step="1"
-            required
-          />
-          <small>默认 10 台；保存后无需重启服务，后续注册立即采用新上限。</small>
-        </div>
-        <div v-if="accessPolicy" class="field-group">
-          <span>当前策略版本</span>
-          <strong>v{{ accessPolicy.version }}</strong>
-          <small>更新于 {{ formatDate(accessPolicy.updatedAt) }}</small>
-        </div>
-      </div>
-      <button class="button" type="submit" :disabled="policyPending || !canSaveAccessPolicy">
-        {{ policyPending ? '正在保存…' : '保存设备上限' }}
-      </button>
-      <p class="form-hint">
-        调低上限不会删除现有设备；已达到或超过新上限的账号需先永久删除旧设备，才能继续接入。
-      </p>
-    </form>
 
     <form v-if="canManageUsers" class="dashboard-card admin-create-form" @submit.prevent="create">
       <div class="batch-form-heading">

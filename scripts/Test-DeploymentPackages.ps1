@@ -294,6 +294,7 @@ try {
                 foreach ($requiredSetting in @(
                     'WENZWORK_CONTROL_URL', 'WENZWORK_DEVICE_ACCESS_KEY', 'WENZWORK_DEVICE_STATE_FILE',
                     'WENZWORK_DEVICE_WORKSPACE', 'WENZWORK_AGENT_SECRET_STORE',
+					'WENZWORK_DEVICE_DIRECT_ENABLED', 'WENZWORK_DEVICE_DIRECT_IP', 'WENZWORK_DEVICE_DIRECT_PORT',
                     'GITHUB_RELEASE_REPOSITORY', 'GITHUB_ACCESS_TOKEN'
                 )) {
                     if (-not $agentTemplate.ContainsKey($requiredSetting)) {
@@ -302,6 +303,29 @@ try {
                 }
                 if ($agentTemplate.GITHUB_RELEASE_REPOSITORY -cne $release.repository) {
                     throw "Device Agent template release repository is stale in $($package.name)."
+                }
+                if ($package.platform -eq 'windows') {
+                    $launcherPath = Join-Path $extractRoot 'start.cmd'
+                    if (-not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) {
+                        throw "Windows Device Agent package is missing start.cmd."
+                    }
+                    $launcherBytes = [IO.File]::ReadAllBytes($launcherPath)
+                    $launcher = [Text.Encoding]::UTF8.GetString($launcherBytes)
+                    foreach ($requiredText in @(
+                        'chcp 65001', 'Start.ps1" -Background', '[成功]', '[失败]',
+                        'timeout /t 3 /nobreak', 'runtime\logs\wenzwork-error.log'
+                    )) {
+                        if (-not $launcher.Contains($requiredText)) {
+                            throw "Windows Device Agent start.cmd is missing required content: $requiredText"
+                        }
+                    }
+                    if ($launcher -match '(?<!\r)\n') {
+                        throw 'Windows Device Agent start.cmd must use CRLF line endings.'
+                    }
+                    $windowsStartup = [IO.File]::ReadAllText((Join-Path $extractRoot 'Start.ps1'))
+                    if (-not $windowsStartup.Contains("WindowStyle = 'Hidden'")) {
+                        throw 'Windows Device Agent background startup does not hide the child console window.'
+                    }
                 }
             }
         }

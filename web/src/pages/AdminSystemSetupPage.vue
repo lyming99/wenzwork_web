@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { useHead } from '@unhead/vue'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 
 import { problemMessage } from '@/api/auth'
+import {
+  getSystemEmailSettings,
+  resetSystemEmailSettings,
+  testSystemEmailSettings,
+  updateSystemEmailSettings,
+  type SystemEmailSettings,
+  type UpdateSystemEmailSettingsRequest,
+} from '@/api/systemEmail'
 import { applySystemSetup, getSystemSetup, type ApplySystemSetupRequest } from '@/api/systemSetup'
+import { useAuthStore } from '@/stores/auth'
 
 useHead({
-  title: '首次系统初始化｜WenzWork',
+  title: '系统设置｜WenzWork',
   meta: [{ name: 'robots', content: 'noindex, nofollow' }],
 })
 
@@ -14,9 +23,19 @@ const loading = ref(true)
 const pending = ref(false)
 const completed = ref(false)
 const errorMessage = ref('')
+const successMessage = ref('')
 const allowedOriginsText = ref('')
 const smtpPassword = ref('')
 const smtpPasswordConfigured = ref(false)
+const setupEmailEnabled = ref(true)
+const emailSettings = ref<SystemEmailSettings | null>(null)
+const emailPassword = ref('')
+const emailPending = ref(false)
+const testPending = ref(false)
+const testRecipient = ref('')
+const auth = useAuthStore()
+
+const pageTitle = computed(() => (completed.value ? '系统设置' : '完成系统初始化'))
 
 const form = reactive<ApplySystemSetupRequest>({
   publicBaseUrl: 'http://localhost:8080',
@@ -35,6 +54,28 @@ const form = reactive<ApplySystemSetupRequest>({
   desktopGithubRepository: 'lyming99/wenzwork',
   mobileGithubRepository: 'lyming99/wenzwork_mobile',
 })
+
+const emailForm = reactive<UpdateSystemEmailSettingsRequest>({
+  smtpHost: '',
+  smtpPort: 1025,
+  smtpUser: '',
+  clearSmtpPassword: false,
+  mailFrom: '',
+  expectedVersion: 1,
+})
+
+const applyEmailSettings = (settings: SystemEmailSettings) => {
+  emailSettings.value = settings
+  Object.assign(emailForm, {
+    smtpHost: settings.smtpHost,
+    smtpPort: settings.smtpPort || 1025,
+    smtpUser: settings.smtpUser,
+    clearSmtpPassword: false,
+    mailFrom: settings.mailFrom,
+    expectedVersion: settings.version,
+  })
+  emailPassword.value = ''
+}
 
 const load = async () => {
   loading.value = true
@@ -60,7 +101,14 @@ const load = async () => {
     })
     allowedOriginsText.value = settings.allowedOrigins.join('\n')
     smtpPasswordConfigured.value = settings.smtpPasswordConfigured
+    setupEmailEnabled.value = settings.smtpConfigured
     completed.value = !settings.required
+    testRecipient.value ||= auth.user?.email ?? ''
+    try {
+      applyEmailSettings(await getSystemEmailSettings())
+    } catch (error) {
+      errorMessage.value = problemMessage(error, '暂时无法读取系统邮箱配置。')
+    }
   } catch (error) {
     errorMessage.value = problemMessage(error, '暂时无法读取系统初始化配置。')
   } finally {
@@ -77,15 +125,92 @@ const submit = async () => {
     .map((value) => value.trim())
     .filter(Boolean)
   const request: ApplySystemSetupRequest = { ...form }
-  if (smtpPassword.value) request.smtpPassword = smtpPassword.value
+  if (setupEmailEnabled.value) {
+    if (smtpPassword.value) request.smtpPassword = smtpPassword.value
+  } else {
+    request.smtpHost = ''
+    request.smtpUser = ''
+    request.mailFrom = ''
+    request.clearSmtpPassword = true
+    delete request.smtpPassword
+  }
   try {
     await applySystemSetup(request)
     completed.value = true
     smtpPassword.value = ''
+    successMessage.value = '初始化配置已保存；系统邮箱不会阻止初始化完成。'
+    getSystemEmailSettings()
+      .then(applyEmailSettings)
+      .catch(() => undefined)
   } catch (error) {
     errorMessage.value = problemMessage(error, '系统初始化失败，请检查配置后重试。')
   } finally {
     pending.value = false
+  }
+}
+
+const emailDraft = (setup: boolean) => {
+  const request = {
+    smtpHost: setup ? (form.smtpHost ?? '') : emailForm.smtpHost,
+    smtpPort: setup ? form.smtpPort : emailForm.smtpPort,
+    smtpUser: setup ? form.smtpUser : emailForm.smtpUser,
+    clearSmtpPassword: setup ? form.clearSmtpPassword : emailForm.clearSmtpPassword,
+    mailFrom: setup ? (form.mailFrom ?? '') : emailForm.mailFrom,
+    recipient: testRecipient.value.trim(),
+  }
+  const password = setup ? smtpPassword.value : emailPassword.value
+  return password ? { ...request, smtpPassword: password } : request
+}
+
+const sendTest = async (setup: boolean) => {
+  if (testPending.value) return
+  testPending.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
+  try {
+    await testSystemEmailSettings(emailDraft(setup))
+    successMessage.value = `测试邮件已发送至 ${testRecipient.value.trim()}。`
+  } catch (error) {
+    errorMessage.value = problemMessage(error, '测试邮件发送失败，请检查当前填写的配置。')
+  } finally {
+    testPending.value = false
+  }
+}
+
+const saveEmail = async () => {
+  if (emailPending.value) return
+  emailPending.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
+  const request: UpdateSystemEmailSettingsRequest = { ...emailForm }
+  if (emailPassword.value) request.smtpPassword = emailPassword.value
+  try {
+    applyEmailSettings(await updateSystemEmailSettings(request))
+    successMessage.value = '系统邮箱已保存到数据库并立即生效。'
+  } catch (error) {
+    errorMessage.value = problemMessage(error, '无法保存系统邮箱配置。')
+  } finally {
+    emailPending.value = false
+  }
+}
+
+const resetEmail = async () => {
+  if (
+    emailPending.value ||
+    !emailSettings.value ||
+    !window.confirm('恢复本地保底配置？数据库中的系统邮箱配置和加密密码将被清除。')
+  )
+    return
+  emailPending.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
+  try {
+    applyEmailSettings(await resetSystemEmailSettings(emailSettings.value.version))
+    successMessage.value = '已恢复使用本地保底配置。'
+  } catch (error) {
+    errorMessage.value = problemMessage(error, '无法恢复本地系统邮箱配置。')
+  } finally {
+    emailPending.value = false
   }
 }
 
@@ -94,23 +219,28 @@ onMounted(load)
 
 <template>
   <section class="dashboard-page admin-setup-page">
-    <p class="section-kicker">Host 首次登录</p>
-    <h1>完成系统初始化</h1>
-    <p class="dashboard-lead">
+    <p class="section-kicker">{{ completed ? 'Host 管理' : 'Host 首次登录' }}</p>
+    <h1>{{ pageTitle }}</h1>
+    <p v-if="!completed" class="dashboard-lead">
       先确认站点、PostgreSQL、Redis
-      与系统邮箱。保存时会先确认数据库连接，并向当前默认管理员邮箱发送测试邮件；随后迁移目标数据库并创建同一管理员。全部成功后才会更新安装目录的
-      .env。
+      与其它运行参数。系统邮箱可以暂不配置，也不会阻止初始化；需要时可先单独测试，初始化完成后仍可随时修改。保存时会确认数据服务、迁移目标数据库并创建同一管理员，成功后更新安装目录的
+      .env，同时把完整邮箱配置加密保存到数据库。
+    </p>
+    <p v-else class="dashboard-lead">
+      管理系统邮件投递配置。数据库动态配置优先且保存后立即生效；恢复本地配置后，Host 会使用 .env
+      作为保底。
     </p>
 
     <div v-if="completed" class="dashboard-card setup-complete" role="status">
-      <strong>配置已经安全写入 .env</strong>
+      <strong>首次初始化已经完成</strong>
       <p>
-        请在安装目录重新运行 <code>start.sh</code>（Windows 为
-        <code>Start.ps1 -Background</code>）。Host 重启后会使用新配置，默认管理员明文密码已从 .env
-        清除。
+        如果刚刚完成初始化，请在安装目录重新运行 <code>start.sh</code>（Windows 为
+        <code>Start.ps1 -Background</code>）。Host
+        重启后会使用其它新配置；数据库邮箱配置无需重启即可生效。
       </p>
     </div>
     <p v-if="errorMessage" class="form-message form-error" role="alert">{{ errorMessage }}</p>
+    <p v-if="successMessage" class="form-message" role="status">{{ successMessage }}</p>
     <p v-if="loading" class="inline-status" role="status">正在读取当前配置…</p>
 
     <form
@@ -143,12 +273,16 @@ onMounted(load)
       <fieldset>
         <legend>系统邮箱</legend>
         <p class="setup-note">
-          完成初始化前会向当前默认管理员邮箱实投一封测试邮件；SMTP 服务器接受投递后才能保存配置。
+          可选配置，不影响初始化。启用后会加密保存到数据库，同时写入本地配置作为保底。
         </p>
-        <div class="form-grid">
+        <label class="checkbox-row">
+          <input v-model="setupEmailEnabled" type="checkbox" />
+          <span>初始化时配置系统邮箱</span>
+        </label>
+        <div v-if="setupEmailEnabled" class="form-grid">
           <label>
             <span>SMTP 主机</span>
-            <input v-model.trim="form.smtpHost" required />
+            <input v-model.trim="form.smtpHost" />
           </label>
           <label>
             <span>SMTP 端口</span>
@@ -168,12 +302,26 @@ onMounted(load)
             />
           </label>
         </div>
-        <label for="setup-mail-from">系统发件人</label>
-        <input id="setup-mail-from" v-model.trim="form.mailFrom" required />
-        <label v-if="smtpPasswordConfigured" class="checkbox-row">
+        <label v-if="setupEmailEnabled" for="setup-mail-from">系统发件人</label>
+        <input v-if="setupEmailEnabled" id="setup-mail-from" v-model.trim="form.mailFrom" />
+        <label v-if="setupEmailEnabled && smtpPasswordConfigured" class="checkbox-row">
           <input v-model="form.clearSmtpPassword" type="checkbox" />
           <span>清除已有 SMTP 密码</span>
         </label>
+        <div v-if="setupEmailEnabled" class="email-test-row">
+          <label>
+            <span>测试收件地址</span>
+            <input v-model.trim="testRecipient" type="email" />
+          </label>
+          <button
+            class="button button-secondary"
+            type="button"
+            :disabled="testPending || !testRecipient"
+            @click="sendTest(true)"
+          >
+            {{ testPending ? '正在发送…' : '测试发送' }}
+          </button>
+        </div>
       </fieldset>
 
       <fieldset>
@@ -228,6 +376,93 @@ onMounted(load)
         {{ pending ? '正在校验并初始化…' : '保存配置并完成初始化' }}
       </button>
     </form>
+
+    <form
+      v-if="completed && emailSettings"
+      class="dashboard-card settings-form setup-form email-settings-form"
+      @submit.prevent="saveEmail"
+    >
+      <header class="email-settings-header">
+        <div>
+          <h2>系统邮箱</h2>
+          <p>
+            当前来源：
+            <strong>{{
+              emailSettings.source === 'database'
+                ? '数据库动态配置'
+                : emailSettings.source === 'local'
+                  ? '本地保底配置'
+                  : '未配置'
+            }}</strong>
+          </p>
+        </div>
+        <span :class="['tag', { 'tag-muted': !emailSettings.configured }]">
+          {{ emailSettings.configured ? '已配置' : '未配置' }}
+        </span>
+      </header>
+
+      <div class="form-grid">
+        <label>
+          <span>SMTP 主机</span>
+          <input v-model.trim="emailForm.smtpHost" required />
+        </label>
+        <label>
+          <span>SMTP 端口</span>
+          <input v-model.number="emailForm.smtpPort" type="number" min="1" max="65535" required />
+        </label>
+        <label>
+          <span>SMTP 用户名</span>
+          <input v-model.trim="emailForm.smtpUser" autocomplete="username" />
+        </label>
+        <label>
+          <span>SMTP 密码</span>
+          <input
+            v-model="emailPassword"
+            type="password"
+            autocomplete="new-password"
+            :placeholder="emailSettings.smtpPasswordConfigured ? '留空保留当前密码' : '未配置'"
+          />
+        </label>
+      </div>
+      <label>
+        <span>系统发件人</span>
+        <input v-model.trim="emailForm.mailFrom" required />
+      </label>
+      <label v-if="emailSettings.smtpPasswordConfigured" class="checkbox-row">
+        <input v-model="emailForm.clearSmtpPassword" type="checkbox" />
+        <span>保存时清除已有 SMTP 密码</span>
+      </label>
+
+      <div class="email-test-row">
+        <label>
+          <span>测试收件地址</span>
+          <input v-model.trim="testRecipient" type="email" required />
+        </label>
+        <button
+          class="button button-secondary"
+          type="button"
+          :disabled="testPending || !testRecipient"
+          @click="sendTest(false)"
+        >
+          {{ testPending ? '正在发送…' : '测试当前填写配置' }}
+        </button>
+      </div>
+
+      <div class="email-actions">
+        <button class="button" type="submit" :disabled="emailPending">
+          {{ emailPending ? '正在保存…' : '保存到数据库并立即启用' }}
+        </button>
+        <button
+          v-if="emailSettings.source === 'database'"
+          class="button button-secondary"
+          type="button"
+          :disabled="emailPending"
+          @click="resetEmail"
+        >
+          恢复本地保底配置
+        </button>
+      </div>
+    </form>
   </section>
 </template>
 
@@ -270,5 +505,31 @@ onMounted(load)
 }
 .setup-complete code {
   color: var(--teal-dark);
+}
+.email-settings-header,
+.email-actions,
+.email-test-row {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+}
+.email-settings-header h2,
+.email-settings-header p {
+  margin: 0;
+}
+.email-settings-header p {
+  margin-top: 6px;
+  color: var(--ink-soft);
+}
+.email-test-row label {
+  flex: 1;
+}
+@media (max-width: 680px) {
+  .email-actions,
+  .email-test-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 </style>

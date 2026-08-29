@@ -34,6 +34,9 @@ const publishedPlan: AdminPricingPlan = {
   currency: 'CNY',
   billingPeriod: 'year',
   features: ['Fast'],
+  remoteAccessEnabled: true,
+  deviceLimit: 10,
+  monthlyTrafficLimitGb: 10,
   status: 'published',
   sortOrder: 20,
   version: 4,
@@ -73,6 +76,8 @@ describe('AdminPricingPage', () => {
     await editButton!.trigger('click')
     await wrapper.get('#pricing-price').setValue('16800')
     await wrapper.get('#pricing-original-price').setValue('21800')
+    await wrapper.get('#pricing-device-limit').setValue('24')
+    await wrapper.get('#pricing-traffic-limit').setValue('100')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
@@ -82,8 +87,52 @@ describe('AdminPricingPage', () => {
       expect.objectContaining({
         priceMinor: 16800,
         originalPriceMinor: 21800,
+        remoteAccessEnabled: true,
+        deviceLimit: 24,
+        monthlyTrafficLimitGb: 100,
         expectedVersion: 4,
         confirmPriceChange: true,
+      }),
+    )
+  })
+
+  it('configures temporary Free access and its device and traffic limits', async () => {
+    const freePlan: AdminPricingPlan = {
+      ...publishedPlan,
+      id: 'b53fddaf-2644-4d0f-b6ea-39d8fba312d6',
+      code: 'free',
+      name: 'Free',
+      priceMinor: 0,
+      originalPriceMinor: null,
+      billingPeriod: 'free',
+      remoteAccessEnabled: false,
+      deviceLimit: 2,
+      monthlyTrafficLimitGb: null,
+      version: 2,
+      publishedVersion: 2,
+      hasUnpublishedChanges: false,
+    }
+    listMock.mockResolvedValue([freePlan])
+    updateMock.mockResolvedValue({ ...freePlan, remoteAccessEnabled: true, version: 3 })
+    const wrapper = mount(AdminPricingPage, { global: { plugins: [createHead()] } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('设备接入未开放')
+    await wrapper.get('button.button-secondary').trigger('click')
+    expect(wrapper.text()).toContain('临时开放普通会员使用远程设备')
+    await wrapper.get('#pricing-remote-access').setValue(true)
+    await wrapper.get('#pricing-device-limit').setValue('3')
+    await wrapper.get('#pricing-traffic-limit').setValue('20')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(updateMock).toHaveBeenCalledWith(
+      freePlan.id,
+      expect.objectContaining({
+        remoteAccessEnabled: true,
+        deviceLimit: 3,
+        monthlyTrafficLimitGb: 20,
+        expectedVersion: 2,
       }),
     )
   })

@@ -17,6 +17,9 @@ const proPlan = (overrides: Partial<PricingPlan> = {}): PricingPlan => ({
   currency: 'CNY',
   billingPeriod: 'year',
   features: [],
+  remoteAccessEnabled: true,
+  deviceLimit: 10,
+  monthlyTrafficLimitGb: 10,
   ...overrides,
 })
 

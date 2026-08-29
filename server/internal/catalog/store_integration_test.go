@@ -437,9 +437,11 @@ func TestStoreAdminPricingLifecycleKeepsPublishedSnapshotsVersionsAndAudit(t *te
 	})
 
 	code := "pricing-integration-" + uuid.NewString()[:12]
+	trafficLimit := int64(250)
 	input := SavePricingPlanInput{
 		Code: code, Name: "Integration Pro", Description: "Initial public copy", PriceMinor: nil,
 		Currency: "CNY", BillingPeriod: "redemption", Features: []string{"First feature"},
+		RemoteAccessEnabled: true, DeviceLimit: 42, MonthlyTrafficLimitGB: &trafficLimit,
 		SortOrder: 90, ActorUserID: actorID,
 	}
 	created, err := store.CreatePricingPlan(ctx, input)
@@ -474,17 +476,21 @@ func TestStoreAdminPricingLifecycleKeepsPublishedSnapshotsVersionsAndAudit(t *te
 	publicPlan := findPublicPricingPlan(publicPlans, code)
 	if publicPlan == nil || publicPlan.Description != "Initial public copy" || publicPlan.PriceMinor == nil ||
 		*publicPlan.PriceMinor != price || publicPlan.OriginalPriceMinor == nil ||
-		*publicPlan.OriginalPriceMinor != originalPrice {
+		*publicPlan.OriginalPriceMinor != originalPrice || !publicPlan.RemoteAccessEnabled ||
+		publicPlan.DeviceLimit != 42 || publicPlan.MonthlyTrafficLimitGB == nil ||
+		*publicPlan.MonthlyTrafficLimitGB != trafficLimit {
 		t.Fatalf("published pricing plan = %+v", publicPlan)
 	}
 
 	input.Description, input.ExpectedVersion, input.ConfirmPriceChange = "Staged copy", published.Version, false
+	input.RemoteAccessEnabled, input.DeviceLimit, input.MonthlyTrafficLimitGB = false, 7, nil
 	staged, err := store.UpdatePricingPlan(ctx, planID, input)
 	if err != nil || staged.Version != 4 || !staged.HasUnpublishedChanges {
 		t.Fatalf("UpdatePricingPlan(staged) = %+v, %v", staged, err)
 	}
 	publicPlans, _ = store.ListPricingPlans(ctx)
-	if current := findPublicPricingPlan(publicPlans, code); current == nil || current.Description != "Initial public copy" {
+	if current := findPublicPricingPlan(publicPlans, code); current == nil || current.Description != "Initial public copy" ||
+		!current.RemoteAccessEnabled || current.DeviceLimit != 42 || current.MonthlyTrafficLimitGB == nil {
 		t.Fatalf("draft edit leaked into public catalog: %+v", current)
 	}
 
@@ -516,7 +522,8 @@ func TestStoreAdminPricingLifecycleKeepsPublishedSnapshotsVersionsAndAudit(t *te
 		t.Fatalf("PublishPricingPlan(archived) = %+v, %v", relisted, err)
 	}
 	publicPlans, _ = store.ListPricingPlans(ctx)
-	if current := findPublicPricingPlan(publicPlans, code); current == nil || current.Description != "Staged copy" {
+	if current := findPublicPricingPlan(publicPlans, code); current == nil || current.Description != "Staged copy" ||
+		current.RemoteAccessEnabled || current.DeviceLimit != 7 || current.MonthlyTrafficLimitGB != nil {
 		t.Fatalf("relisted pricing plan = %+v", current)
 	}
 

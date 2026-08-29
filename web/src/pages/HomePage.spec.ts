@@ -29,6 +29,9 @@ describe('HomePage', () => {
         currency: 'CNY',
         billingPeriod: 'free',
         features: ['基础编辑'],
+        remoteAccessEnabled: false,
+        deviceLimit: 2,
+        monthlyTrafficLimitGb: null,
       },
       {
         code: 'pro',
@@ -39,6 +42,9 @@ describe('HomePage', () => {
         currency: 'CNY',
         billingPeriod: 'redemption',
         features: ['更多会员专属功能'],
+        remoteAccessEnabled: true,
+        deviceLimit: 10,
+        monthlyTrafficLimitGb: 10,
       },
     ])
     const router = createRouter({ history: createMemoryHistory(), routes: [] })

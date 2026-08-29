@@ -128,6 +128,18 @@ type DeviceLinkGrantTrustBundle struct {
 	Keys   []DeviceLinkGrantVerificationKey `json:"keys"`
 }
 
+// DeviceLinkGrantTrust returns a defensive copy suitable for an authenticated
+// Device Agent registration response. Direct mode needs the same trust anchors
+// as the Relay allocation path before it can accept a browser Carrier.
+func (service *Service) DeviceLinkGrantTrust() DeviceLinkGrantTrustBundle {
+	if service == nil {
+		return DeviceLinkGrantTrustBundle{}
+	}
+	result := DeviceLinkGrantTrustBundle{Issuer: service.deviceLinkGrantTrust.Issuer}
+	result.Keys = append([]DeviceLinkGrantVerificationKey(nil), service.deviceLinkGrantTrust.Keys...)
+	return result
+}
+
 func NewService(config ServiceConfig) (*Service, error) {
 	config.Region, config.Pool, config.Cell = strings.TrimSpace(config.Region), strings.TrimSpace(config.Pool), strings.TrimSpace(config.Cell)
 	if config.Database == nil || config.AccessPolicy == nil || config.Region == "" || config.Pool == "" || config.Cell == "" ||

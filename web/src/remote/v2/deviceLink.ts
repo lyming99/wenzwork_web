@@ -71,12 +71,17 @@ export const validateIssuedDeviceLink = (
 ) => {
   let endpoint: URL
   try {
-    endpoint = new URL(link.relayUrl)
+    endpoint = new URL(link.connectionUrl || link.relayUrl)
   } catch {
-    throw new Error('Relay 地址无效。')
+    throw new Error('设备连接地址无效。')
   }
   if (
+    (link.connectionMode !== 'relay' && link.connectionMode !== 'direct') ||
+    link.connectionUrl !== link.relayUrl ||
     (endpoint.protocol !== 'ws:' && endpoint.protocol !== 'wss:') ||
+    !endpoint.hostname ||
+    endpoint.username ||
+    endpoint.password ||
     endpoint.pathname !== '/v2/connect' ||
     endpoint.search ||
     endpoint.hash ||
@@ -99,8 +104,18 @@ export const validateIssuedDeviceLink = (
   ) {
     throw new Error('设备连接授权绑定无效。')
   }
+  if (
+    link.connectionMode === 'direct' &&
+    (!Number.isSafeInteger(link.maximumLifetimeSeconds) ||
+      link.maximumLifetimeSeconds < 5 ||
+      link.maximumLifetimeSeconds > 300)
+  ) {
+    throw new Error('设备直连授权有效期无效。')
+  }
   if (location.protocol === 'https:' && endpoint.protocol === 'ws:') {
-    throw new Error('当前 HTTPS 页面不能连接 ws:// Relay；请将 Relay 配置为 wss://。')
+    throw new Error(
+      '当前 HTTPS 页面不能连接 ws:// 设备；请使用 HTTP 管理页或为直连入口配置受信任的 WSS。',
+    )
   }
 }
 

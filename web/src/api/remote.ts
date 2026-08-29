@@ -34,6 +34,12 @@ export interface RemoteDevice {
   lastSeenAt: string | null
   lastSyncAt: string | null
   remoteEnabledAt: string | null
+  connectionMode: 'relay' | 'direct'
+  directModeEnabled: boolean
+  directAvailable: boolean
+  directTlsEnabled: boolean
+  directIp: string | null
+  directPort: number | null
 }
 
 export interface CursorPage<T> {
@@ -140,6 +146,9 @@ export interface RemoteDeviceLink {
   deviceConnectionGrant: string
   expiresAt: string
   maximumLifetimeSeconds: number
+  connectionMode: 'relay' | 'direct'
+  connectionUrl: string
+  /** @deprecated Use connectionUrl. */
   relayUrl: string
   relayNodeId: string
   relayCellId: string
@@ -169,11 +178,15 @@ export const getRemoteDevice = async (deviceId: string) =>
   (await apiClient.get<{ device: RemoteDevice }>(`/remote/devices/${encodeURIComponent(deviceId)}`))
     .data.device
 
-export const updateRemoteDevice = async (deviceId: string, deviceName: string) =>
+export const updateRemoteDevice = async (
+  deviceId: string,
+  deviceName: string,
+  directModeEnabled?: boolean,
+) =>
   (
     await apiClient.patch<{ device: RemoteDevice }>(
       `/remote/devices/${encodeURIComponent(deviceId)}`,
-      { deviceName },
+      { deviceName, directModeEnabled },
     )
   ).data.device
 

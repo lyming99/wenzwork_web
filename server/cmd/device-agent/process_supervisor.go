@@ -73,9 +73,13 @@ type processLaunchSpec struct {
 	WorkingDirectory string
 	Argv             []string
 	Environment      []string
-	Rows             uint16
-	Columns          uint16
-	Limits           processResourceLimits
+	// InheritHostEnvironment is reserved for a user-opened interactive
+	// terminal. Background/AI PTYs keep the reviewed minimal environment so
+	// ambient service credentials are not exposed to an automated command.
+	InheritHostEnvironment bool
+	Rows                   uint16
+	Columns                uint16
+	Limits                 processResourceLimits
 }
 
 type processSupervisor struct {
@@ -85,6 +89,7 @@ type processSupervisor struct {
 	memoryPollInterval  time.Duration
 	maximumConcurrent   int
 	environmentProvider func() []string
+	hostEnvironment     func() []string
 	processes           map[uuid.UUID]*supervisedProcess
 	closed              bool
 }
@@ -111,6 +116,9 @@ func newProcessSupervisor(environmentProvider ...func() []string) *processSuperv
 	if len(environmentProvider) > 0 {
 		supervisor.environmentProvider = environmentProvider[0]
 	}
+	if len(environmentProvider) > 1 {
+		supervisor.hostEnvironment = environmentProvider[1]
+	}
 	return supervisor
 }
 
@@ -126,15 +134,19 @@ func newProcessSupervisorWithDependencies(starter processPTYStarter, memoryBytes
 }
 
 func (supervisor *processSupervisor) Start(spec processLaunchSpec) (*supervisedProcess, error) {
-	// Process callers never inherit the Agent service environment. Task runners
-	// may add explicitly reviewed variables on top of the fixed terminal
-	// allowlist, while protected process-search and profile variables remain
-	// immutable.
+	// Automated PTY callers never inherit the Agent service environment. A
+	// user-opened terminal starts from the host snapshot captured before
+	// agent.env is loaded, so ordinary system variables remain available while
+	// service configuration and credentials cannot leak into the shell.
 	injections := spec.Environment
 	if supervisor != nil && supervisor.environmentProvider != nil {
 		injections = append(append([]string(nil), supervisor.environmentProvider()...), injections...)
 	}
-	environment, err := reviewedProcessEnvironment(injections)
+	base := minimalTerminalEnvironment()
+	if spec.InheritHostEnvironment && supervisor != nil && supervisor.hostEnvironment != nil {
+		base = supervisor.hostEnvironment()
+	}
+	environment, err := reviewedProcessEnvironmentWithBase(base, injections, spec.InheritHostEnvironment)
 	if err != nil {
 		return nil, err
 	}
@@ -181,17 +193,25 @@ func (supervisor *processSupervisor) Start(spec processLaunchSpec) (*supervisedP
 }
 
 func reviewedProcessEnvironment(injections []string) ([]string, error) {
+	return reviewedProcessEnvironmentWithBase(minimalTerminalEnvironment(), injections, false)
+}
+
+func reviewedProcessEnvironmentWithBase(base, injections []string, omitAgentPrivate bool) ([]string, error) {
 	type environmentEntry struct {
 		name  string
 		value string
 	}
 	entries := make(map[string]environmentEntry)
-	for _, variable := range minimalTerminalEnvironment() {
+	for _, variable := range base {
 		name, value, found := strings.Cut(variable, "=")
 		if !found || name == "" || strings.IndexByte(value, 0) >= 0 {
 			return nil, errRPCInvalid
 		}
-		entries[strings.ToUpper(name)] = environmentEntry{name: name, value: value}
+		upper := strings.ToUpper(name)
+		if omitAgentPrivate && strings.HasPrefix(upper, "WENZWORK_") {
+			continue
+		}
+		entries[upper] = environmentEntry{name: name, value: value}
 	}
 	for _, variable := range injections {
 		name, value, found := strings.Cut(variable, "=")

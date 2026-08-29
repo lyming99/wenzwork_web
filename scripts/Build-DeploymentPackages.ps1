@@ -159,6 +159,9 @@ function Add-PortableLifecycle {
         foreach ($name in @('Init.ps1', 'Start.ps1', 'Stop.ps1', 'Upgrade.ps1')) {
             Copy-Item -LiteralPath (Join-Path $deploymentTemplates "windows\$name") -Destination (Join-Path $PackageRoot $name) -Force
         }
+        if ($Component -eq 'device-agent') {
+            Copy-Item -LiteralPath (Join-Path $deploymentTemplates 'windows\start.cmd') -Destination (Join-Path $PackageRoot 'start.cmd') -Force
+        }
         if ($Component -eq 'host') {
             Copy-Item -LiteralPath (Join-Path $deploymentTemplates 'windows\Backup.ps1') -Destination (Join-Path $PackageRoot 'Backup.ps1') -Force
         }
@@ -226,6 +229,13 @@ function Add-ComponentConfiguration {
                 'WENZWORK_DEVICE_STATE_FILE=./runtime/state/agent-state.json'
                 'WENZWORK_DEVICE_WORKSPACE=./workspace'
                 'WENZWORK_AGENT_SECRET_STORE=file'
+				'# Replace the IP with a reachable device address before enabling direct mode.'
+				'WENZWORK_DEVICE_DIRECT_ENABLED=false'
+				'WENZWORK_DEVICE_DIRECT_IP=127.0.0.1'
+				'WENZWORK_DEVICE_DIRECT_PORT=9443'
+				'# WENZWORK_DEVICE_DIRECT_ACCESS_KEY=device_replace_with_a_43_character_urlsafe_access_key'
+				'# WENZWORK_DEVICE_DIRECT_TLS_CERT_FILE=./config/direct-cert.pem'
+				'# WENZWORK_DEVICE_DIRECT_TLS_KEY_FILE=./config/direct-key.pem'
                 '# WENZWORK_AGENT_FEATURE_FLAGS=-terminal.interactive,-tasks.v2,-ai.tools'
                 '# WENZWORK_DEVICE_TLS_CA_FILE=./config/control-ca.pem'
                 "GITHUB_RELEASE_REPOSITORY=$Repository"

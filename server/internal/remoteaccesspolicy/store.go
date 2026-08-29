@@ -20,7 +20,7 @@ const (
 )
 
 var (
-	ErrMembershipRequired = errors.New("an active paid membership is required for remote device access")
+	ErrMembershipRequired = errors.New("the account pricing plan does not allow remote device access")
 	ErrDeviceLimitReached = errors.New("the account remote device limit has been reached")
 	ErrSettingsInvalid    = errors.New("remote access policy settings are invalid")
 	ErrSettingsConflict   = errors.New("remote access policy settings changed concurrently")
@@ -31,6 +31,21 @@ type Settings struct {
 	DeviceLimit int       `json:"deviceLimit"`
 	Version     int64     `json:"version"`
 	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+// AccessPlan is the published pricing-plan entitlement selected for an
+// account. MonthlyTrafficLimitGB is stored for future metering but is not yet
+// enforced by the remote data plane.
+type AccessPlan struct {
+	PlanCode              string
+	DeviceLimit           int
+	MonthlyTrafficLimitGB *int64
+}
+
+type accessPlanRow struct {
+	PlanCode              string `gorm:"column:plan_code"`
+	DeviceLimit           int    `gorm:"column:device_limit"`
+	MonthlyTrafficLimitGB *int64 `gorm:"column:monthly_traffic_limit_gb"`
 }
 
 type UpdateSettingsInput struct {
@@ -123,55 +138,82 @@ func (store *Store) UpdateSettings(ctx context.Context, input UpdateSettingsInpu
 	return result, err
 }
 
-// RequireMembershipTx fails closed unless the account has a currently active,
-// non-free membership. A membership row whose expiry has passed is not active
-// even if its asynchronously-maintained status column still says active.
+// RequireMembershipTx retains its historical name for callers, but now checks
+// the account's published pricing-plan entitlement. An active paid membership
+// selects its matching plan; otherwise an enabled Free plan lets ordinary
+// accounts use remote access temporarily. The check fails closed if neither
+// published plan permits access.
 func (store *Store) RequireMembershipTx(tx *gorm.DB, userID uuid.UUID, now time.Time) error {
 	if store == nil || tx == nil || userID == uuid.Nil {
 		return ErrUnavailable
 	}
-	var allowed bool
-	err := tx.Raw(`
-		SELECT EXISTS (
-			SELECT 1
-			FROM memberships membership
-			JOIN membership_plans plan ON plan.id = membership.plan_id
-			JOIN users account ON account.id = membership.user_id
-			WHERE membership.user_id = ?
-			  AND account.status = 'active'
-			  AND membership.status = 'active'
-			  AND plan.rank > 0
-			  AND membership.starts_at <= ?
-			  AND (membership.expires_at IS NULL OR membership.expires_at > ?)
-		)`, userID, now.UTC(), now.UTC()).Scan(&allowed).Error
-	if err != nil {
-		return fmt.Errorf("%w: check membership: %v", ErrUnavailable, err)
-	}
-	if !allowed {
-		return ErrMembershipRequired
-	}
-	return nil
+	_, err := store.resolveAccessPlanTx(tx, userID, now)
+	return err
 }
 
 // RequireDeviceCapacityTx is called only when a credential does not already
 // exist. All credential rows count toward the enrolled-device limit; revoking
 // remote access does not free a slot, while permanently deleting a device does.
-func (store *Store) RequireDeviceCapacityTx(tx *gorm.DB, userID uuid.UUID) (Settings, error) {
+func (store *Store) RequireDeviceCapacityTx(tx *gorm.DB, userID uuid.UUID, now time.Time) (AccessPlan, error) {
 	if store == nil || tx == nil || userID == uuid.Nil {
-		return Settings{}, ErrUnavailable
+		return AccessPlan{}, ErrUnavailable
 	}
-	var row settingsRow
-	if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).First(&row, "singleton = ?", true).Error; err != nil {
-		return Settings{}, fmt.Errorf("%w: load device limit: %v", ErrUnavailable, err)
+	plan, err := store.resolveAccessPlanTx(tx, userID, now)
+	if err != nil {
+		return AccessPlan{}, err
 	}
 	var count int64
 	if err := tx.Table("remote_device_credentials").Where("user_id = ?", userID).Count(&count).Error; err != nil {
-		return Settings{}, fmt.Errorf("%w: count enrolled devices: %v", ErrUnavailable, err)
+		return AccessPlan{}, fmt.Errorf("%w: count enrolled devices: %v", ErrUnavailable, err)
 	}
-	if count >= int64(row.DeviceLimit) {
-		return settingsFromRow(row), ErrDeviceLimitReached
+	if count >= int64(plan.DeviceLimit) {
+		return plan, ErrDeviceLimitReached
 	}
-	return settingsFromRow(row), nil
+	return plan, nil
+}
+
+func (store *Store) resolveAccessPlanTx(tx *gorm.DB, userID uuid.UUID, now time.Time) (AccessPlan, error) {
+	var row accessPlanRow
+	err := tx.Raw(`
+		WITH candidate_plans AS (
+			SELECT plan.code, plan.rank
+			FROM memberships membership
+			JOIN membership_plans plan ON plan.id = membership.plan_id
+			WHERE membership.user_id = ?
+			  AND membership.status = 'active'
+			  AND plan.status = 'active'
+			  AND plan.rank > 0
+			  AND membership.starts_at <= ?
+			  AND (membership.expires_at IS NULL OR membership.expires_at > ?)
+			UNION ALL
+			SELECT 'free', 0
+		)
+		SELECT published.code AS plan_code,
+		       published.device_limit,
+		       published.monthly_traffic_limit_gb
+		FROM users account
+		JOIN candidate_plans candidate ON true
+		JOIN pricing_plans pricing
+		  ON pricing.status = 'published'
+		JOIN pricing_plan_versions published
+		  ON published.pricing_plan_id = pricing.id
+		 AND published.version = pricing.published_version
+		 AND published.code = candidate.code
+		WHERE account.id = ?
+		  AND account.status = 'active'
+		  AND published.remote_access_enabled = true
+		ORDER BY candidate.rank DESC
+		LIMIT 1`, userID, now.UTC(), now.UTC(), userID).Scan(&row).Error
+	if err != nil {
+		return AccessPlan{}, fmt.Errorf("%w: resolve pricing-plan access: %v", ErrUnavailable, err)
+	}
+	if row.PlanCode == "" || !validDeviceLimit(row.DeviceLimit) {
+		return AccessPlan{}, ErrMembershipRequired
+	}
+	return AccessPlan{
+		PlanCode: row.PlanCode, DeviceLimit: row.DeviceLimit,
+		MonthlyTrafficLimitGB: row.MonthlyTrafficLimitGB,
+	}, nil
 }
 
 func settingsFromRow(row settingsRow) Settings {

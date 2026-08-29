@@ -10,17 +10,20 @@ import (
 func TestValidatePricingPlanInputNormalizesSafeValues(t *testing.T) {
 	price := int64(12800)
 	originalPrice := int64(16800)
+	trafficLimit := int64(100)
 	input, err := validatePricingPlanInput(SavePricingPlanInput{
 		Code: " Pro_Year ", Name: " Pro 年付 ", Description: " 创作者方案 ", PriceMinor: &price,
 		OriginalPriceMinor: &originalPrice,
 		Currency:           "cny", BillingPeriod: "year", Features: []string{" 快速启动 ", "项目文档"},
+		RemoteAccessEnabled: true, DeviceLimit: 25, MonthlyTrafficLimitGB: &trafficLimit,
 		SortOrder: 20, ExpectedVersion: 2, ActorUserID: uuid.New(),
 	}, true)
 	if err != nil {
 		t.Fatalf("validatePricingPlanInput() error = %v", err)
 	}
 	if input.Code != "pro_year" || input.Name != "Pro 年付" || input.Currency != "CNY" ||
-		input.OriginalPriceMinor == nil || *input.OriginalPriceMinor != originalPrice || input.Features[0] != "快速启动" {
+		input.OriginalPriceMinor == nil || *input.OriginalPriceMinor != originalPrice || input.Features[0] != "快速启动" ||
+		input.DeviceLimit != 25 || input.MonthlyTrafficLimitGB == nil || *input.MonthlyTrafficLimitGB != trafficLimit {
 		t.Fatalf("normalized input = %+v", input)
 	}
 }
@@ -29,12 +32,15 @@ func TestValidatePricingPlanInputRejectsUnsafeOrAmbiguousValues(t *testing.T) {
 	price := int64(100)
 	equalOriginalPrice := int64(100)
 	originalWithoutPrice := int64(200)
+	invalidTrafficLimit := int64(0)
 	tests := []SavePricingPlanInput{
 		{Code: "Bad Code", Name: "Plan", Currency: "CNY", BillingPeriod: "year", ActorUserID: uuid.New()},
 		{Code: "plan", Name: "Plan", Currency: "RMB", BillingPeriod: "weekly", ActorUserID: uuid.New()},
 		{Code: "plan", Name: "Plan", Currency: "CNY", BillingPeriod: "year", Features: []string{"Same", "same"}, ActorUserID: uuid.New()},
 		{Code: "plan", Name: "Plan", PriceMinor: &price, OriginalPriceMinor: &equalOriginalPrice, Currency: "CNY", BillingPeriod: "year", ActorUserID: uuid.New()},
 		{Code: "plan", Name: "Plan", OriginalPriceMinor: &originalWithoutPrice, Currency: "CNY", BillingPeriod: "year", ActorUserID: uuid.New()},
+		{Code: "plan", Name: "Plan", Currency: "CNY", BillingPeriod: "year", DeviceLimit: 100001, ActorUserID: uuid.New()},
+		{Code: "plan", Name: "Plan", Currency: "CNY", BillingPeriod: "year", DeviceLimit: 10, MonthlyTrafficLimitGB: &invalidTrafficLimit, ActorUserID: uuid.New()},
 	}
 	for _, input := range tests {
 		if _, err := validatePricingPlanInput(input, false); !errors.Is(err, ErrPricingPlanInvalid) {

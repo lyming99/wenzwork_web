@@ -262,6 +262,11 @@ function Assert-PackageTree {
         }
     }
     $metadata = Get-PackageMetadata -Root $resolved
+    if ($metadata.WENZWORK_PACKAGE_COMPONENT -ceq 'device-agent' -and
+        $metadata.WENZWORK_PACKAGE_PLATFORM -ceq 'windows' -and
+        -not (Test-Path -LiteralPath (Join-Path $resolved 'start.cmd') -PathType Leaf)) {
+        throw 'Required file is missing: start.cmd'
+    }
     [void](Get-PackageEnvironmentTemplatePath -Root $resolved -Metadata $metadata)
     $binary = Get-PackageRequiredBinary -Component $metadata.WENZWORK_PACKAGE_COMPONENT
     if (-not (Test-Path -LiteralPath (Join-Path $resolved "bin\$binary") -PathType Leaf)) {
